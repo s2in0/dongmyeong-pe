@@ -1,4 +1,4 @@
-# 동명 줄넘기 기록 PWA
+# JUMPY · 동명 줄넘기 기록 PWA
 
 기존 [JangSeongHun99/jumpRopeCounter](https://github.com/JangSeongHun99/jumpRopeCounter)의 MediaPipe 웹 카운터와 점프 판정 로직을 바탕으로 학생 기록과 반별 교사 설정을 더한 버전입니다. `docs/`는 아이패드·노트북용 PWA이고, 기존 Python 카메라 프로그램은 그대로 포함되어 있습니다.
 
