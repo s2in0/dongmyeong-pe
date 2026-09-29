@@ -2,7 +2,7 @@
  * 첫 배포 전 프로젝트 설정 > 스크립트 속성에 TEACHER_PIN(6자리 이상)을 직접 설정합니다.
  * 공개 URL과 PIN을 학생에게 함께 배포하지 마세요. PIN은 교사 설정 변경에만 사용됩니다.
  */
-var SETTINGS = '설정', RECORDS = '기록';
+var SETTINGS = '설정', RECORDS = '기록', MUSIC = '음악줄넘기';
 var HEAD = ['id','createdAt','grade','classNo','number','count','durationSeconds','countdownSeconds','sensitivity','misses','bestStreak'];
 var DEFAULTS = {durationSeconds:30,countdownSeconds:3,sensitivity:'보통',retryAllowed:true,retryLimit:2,recordMode:'best',rankingVisible:true,activityOpen:true};
 function doGet() { return out_({ok:true,message:'줄넘기 앱 연결됨'}); }
@@ -12,6 +12,11 @@ function doPost(e) {
     if (d.type === 'ping') return out_({ok:true});
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (d.type === 'bootstrap') return out_(bootstrap_(ss, d));
+    if (d.type === 'teacherData') {
+      if (!authorized_(d.pin)) return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});
+      return out_(teacherData_(ss,d));
+    }
+    if (d.type === 'musicSubmit') return out_(musicSubmit_(ss,d));
     if (d.type === 'saveSettings') {
       if (!authorized_(d.pin)) return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});
       var key = classKey_(d.grade,d.classNo), next = validSettings_(d.settings);
@@ -78,5 +83,33 @@ function record_(ss,d) { var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),
     sh.appendRow([id,created,g,c,n,count,duration,integer_(d.countdownSeconds,0,15),String(s.sensitivity),integer_(d.misses||0,0,5000),integer_(d.bestStreak||0,0,5000)]);
     return {ok:true,createdAt:created};
   } finally {lock.releaseLock();}
+}
+function safeText_(value,max) {
+  var s=String(value||'').trim(); if(!s||s.length>max) throw Error('음악 줄넘기 입력을 확인해 주세요.');
+  return /^[=+\-@\t\r]/.test(s)?"'"+s:s;
+}
+function musicSubmit_(ss,d) {
+  var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),n=integer_(d.number,1,99);
+  if(!settings_(ss,classKey_(g,c)).activityOpen) throw Error('이 반의 활동이 닫혔습니다.');
+  var group=safeText_(d.groupName,20),theme=safeText_(d.theme,40),allowed=['모아뛰기','번갈아뛰기','엇걸기','옆뛰기'];
+  if(!Array.isArray(d.moves)||d.moves.length!==4||d.moves.some(function(x){return allowed.indexOf(x)<0;})) throw Error('4박자 동작을 확인해 주세요.');
+  var lock=LockService.getScriptLock();lock.waitLock(20000);
+  try{var sh=sheet_(ss,MUSIC,['createdAt','grade','classNo','number','groupName','theme','moves']);
+    sh.appendRow([new Date().toISOString(),g,c,n,group,theme,JSON.stringify(d.moves)]);
+    return {ok:true};
+  }finally{lock.releaseLock();}
+}
+function teacherData_(ss,d) {
+  var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),s=settings_(ss,classKey_(g,c));
+  var all=allRecords_(ss,g,c),same=all.filter(function(r){return r.durationSeconds===s.durationSeconds;});
+  var by={},attempts={};same.forEach(function(r){attempts[r.number]=(attempts[r.number]||0)+1;var old=by[r.number];if(!old||(s.recordMode==='latest'?r.createdAt>old.createdAt:r.count>old.count))by[r.number]=r;});
+  var ranking=Object.keys(by).map(function(k){return {number:Number(k),count:by[k].count,attempts:attempts[k]};}).sort(function(a,b){return b.count-a.count||a.number-b.number;});
+  ranking.forEach(function(r){r.rank=1+ranking.filter(function(x){return x.count>r.count;}).length;});
+  var sh=sheet_(ss,MUSIC,['createdAt','grade','classNo','number','groupName','theme','moves']),rows=sh.getDataRange().getValues(),latest={};
+  for(var i=1;i<rows.length;i++) if(Number(rows[i][1])===g&&Number(rows[i][2])===c){
+    var key=String(rows[i][4]),moves=[];try{moves=JSON.parse(rows[i][6]);}catch(e){}
+    latest[key]={groupName:key,theme:String(rows[i][5]),number:Number(rows[i][3]),moves:moves,createdAt:String(rows[i][0])};
+  }
+  return {ok:true,settings:s,participants:ranking.map(function(r){return r.number;}),ranking:ranking,music:Object.keys(latest).map(function(k){return latest[k];}).sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);})};
 }
 function out_(v) { return ContentService.createTextOutput(JSON.stringify(v)).setMimeType(ContentService.MimeType.JSON); }
