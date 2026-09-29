@@ -105,7 +105,7 @@ function teacherData_(ss,d) {
   var by={},attempts={};same.forEach(function(r){attempts[r.number]=(attempts[r.number]||0)+1;var old=by[r.number];if(!old||(s.recordMode==='latest'?r.createdAt>old.createdAt:r.count>old.count))by[r.number]=r;});
   var ranking=Object.keys(by).map(function(k){return {number:Number(k),count:by[k].count,attempts:attempts[k]};}).sort(function(a,b){return b.count-a.count||a.number-b.number;});
   ranking.forEach(function(r){r.rank=1+ranking.filter(function(x){return x.count>r.count;}).length;});
-  var sh=sheet_(ss,MUSIC,['createdAt','grade','classNo','number','groupName','theme','moves']),rows=sh.getDataRange().getValues(),latest={};
+  var sh=sheet_(ss,MUSIC,['createdAt','grade','classNo','number','groupName','theme','moves']),rows=sh.getDataRange().getValues(),latest=Object.create(null);
   for(var i=1;i<rows.length;i++) if(Number(rows[i][1])===g&&Number(rows[i][2])===c){
     var key=String(rows[i][4]),moves=[];try{moves=JSON.parse(rows[i][6]);}catch(e){}
     latest[key]={groupName:key,theme:String(rows[i][5]),number:Number(rows[i][3]),moves:moves,createdAt:String(rows[i][0])};
