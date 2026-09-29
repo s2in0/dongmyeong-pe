@@ -89,6 +89,7 @@
       this.maxScaleChange = d("maxScaleChange", 0.2);
       this.maxWidthChange = d("maxWidthChange", 0.4);
       this.lenient = !!d("lenient", false);
+      this.requireFeet = !!d("requireFeet", false);
       this.rhythmMin = this.lenient ? 1 : d("rhythmMin", 3);
       this.periodRange = d("periodRange", [0.25, 1.5]);
       this.periodTolerance = d("periodTolerance", 0.5);
@@ -220,9 +221,16 @@
     _coherent(tValley, tPeak, bodyRise) {
       const a = this._sampleAt(tValley), b = this._sampleAt(tPeak);
       if (!a || !b) return null;
+      if (this.requireFeet && (a[3] === null || a[4] === null || b[3] === null || b[4] === null ||
+          a[2] === null || b[2] === null || a[1] === null || b[1] === null)) return "feet";
       if (a[3] !== null && a[4] !== null && b[3] !== null && b[4] !== null) {
-        const lift = Math.max(b[3] - a[3], b[4] - a[4]);
-        return lift >= this.feetLift * this._scale ? null : "feet";
+        const left = b[3] - a[3], right = b[4] - a[4];
+        if (this.requireFeet) {
+          const hipRise = b[2] - a[2], headRise = b[1] - a[1];
+          return Math.min(left, right) >= this.feetLift * this._scale &&
+            hipRise >= this.coherence * bodyRise && headRise >= this.coherence * bodyRise ? null : "feet";
+        }
+        return Math.max(left, right) >= this.feetLift * this._scale ? null : "feet";
       }
       const rises = [];
       for (const i of [1, 2]) if (a[i] !== null && b[i] !== null) rises.push(b[i] - a[i]);

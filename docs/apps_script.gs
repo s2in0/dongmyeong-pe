@@ -1,65 +1,82 @@
-/**
- * 줄넘기 카운터 - 구글 스프레드시트 연동 (Apps Script 웹 앱)
- *
- * 설치 (선생님이 한 번만)
- *   1. 구글 드라이브에서 새 스프레드시트를 만듭니다 (예: "줄넘기 기록").
- *   2. 메뉴 확장 프로그램 > Apps Script 를 열고, 기본 코드를 지운 뒤 이 파일 내용을 전부 붙여넣고 저장합니다.
- *   3. 오른쪽 위 배포 > 새 배포 > 유형 선택(톱니바퀴) > 웹 앱
- *        - 설명: 줄넘기
- *        - 다음 사용자 인증 정보로 실행: 나
- *        - 액세스 권한이 있는 사용자: 모든 사용자   <- 꼭 "모든 사용자"
- *      배포 를 누르고 권한 허용(고급 > 안전하지 않은 페이지로 이동 > 허용)을 거치면
- *      https://script.google.com/macros/s/..../exec 형태의 웹 앱 URL이 나옵니다.
- *   4. 그 URL을 줄넘기 카운터 페이지의 "선생님 설정 > 구글 스프레드시트 연동"에 넣고 "연결 테스트"를 누릅니다.
- *      "학생용 링크 복사"로 만든 링크를 학생들에게 나눠 주면 학생 아이패드에는 설정이 필요 없습니다.
- *
- * 동작: 저장할 때마다 학년-반 이름의 탭(없으면 만들어짐)과 "전체" 탭에 한 줄씩 추가됩니다.
- *       코드를 고친 뒤에는 배포 > 배포 관리 > 새 버전 으로 다시 배포해야 반영됩니다.
+/** 줄넘기 PWA 시트 백엔드. 스프레드시트에 연결된 Apps Script에 붙여넣으세요.
+ * 첫 배포 전 프로젝트 설정 > 스크립트 속성에 TEACHER_PIN(6자리 이상)을 직접 설정합니다.
+ * 공개 URL과 PIN을 학생에게 함께 배포하지 마세요. PIN은 교사 설정 변경에만 사용됩니다.
  */
-
-var ALL_SHEET = "전체";
-var HEADER = ["기록 시각", "학년-반", "이름", "점프 횟수", "시간(초)", "분당 횟수", "걸림", "최고 연속", "제한 시간(초)", "서버 수신 시각", "기기"];
-
+var SETTINGS = '설정', RECORDS = '기록';
+var HEAD = ['id','createdAt','grade','classNo','number','count','durationSeconds','countdownSeconds','sensitivity','misses','bestStreak'];
+var DEFAULTS = {durationSeconds:30,countdownSeconds:3,sensitivity:'보통',retryAllowed:true,retryLimit:2,recordMode:'best',rankingVisible:true,activityOpen:true};
+function doGet() { return out_({ok:true,message:'줄넘기 앱 연결됨'}); }
 function doPost(e) {
-  var lock = LockService.getScriptLock();
-  lock.waitLock(20000);   // 여러 아이패드가 동시에 보내도 순서대로 처리
   try {
-    var d = JSON.parse(e.postData.contents);
+    var d = JSON.parse((e.postData || {}).contents || '{}');
+    if (d.type === 'ping') return out_({ok:true});
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (d.type === "ping") return json_({ ok: true, spreadsheet: ss.getName() });
-    if (d.type !== "record") return json_({ ok: false, error: "unknown type" });
-    var cls = String(d.cls || "").trim().replace(/[\[\]\*\/\\\?:]/g, "-").slice(0, 60) || "미지정";
-    var row = [String(d.date || ""), cls, String(d.name || ""), Number(d.count) || 0, Number(d.duration) || 0,
-               Number(d.perMin) || 0, Number(d.misses) || 0, Number(d.best) || 0, Number(d.timer) || 0,
-               new Date(), String(d.device || "")];
-    appendTo_(ss, cls, row);
-    appendTo_(ss, ALL_SHEET, row);
-    return json_({ ok: true, sheet: cls });
-  } catch (err) {
-    return json_({ ok: false, error: String(err) });
-  } finally {
-    lock.releaseLock();
-  }
+    if (d.type === 'bootstrap') return out_(bootstrap_(ss, d));
+    if (d.type === 'saveSettings') {
+      if (!authorized_(d.pin)) return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});
+      var key = classKey_(d.grade,d.classNo), next = validSettings_(d.settings);
+      var lock = LockService.getScriptLock(); lock.waitLock(20000);
+      try { var s = sheet_(ss, SETTINGS, ['key','json']); var data=s.getDataRange().getValues();
+        var row=data.findIndex(function(x,i){return i>0 && x[0]===key;});
+        if(row<0) s.appendRow([key,JSON.stringify(next)]); else s.getRange(row+1,2).setValue(JSON.stringify(next));
+      } finally { lock.releaseLock(); }
+      return out_({ok:true,settings:next});
+    }
+    if (d.type === 'record') return out_(record_(ss,d));
+    return out_({ok:false,error:'알 수 없는 요청'});
+  } catch(err) { return out_({ok:false,error:String(err.message || err)}); }
 }
-
-function doGet() {
-  return json_({ ok: true, message: "줄넘기 카운터 시트 연동이 동작 중입니다. 페이지의 연결 테스트를 사용하세요." });
+function authorized_(pin) { var stored=PropertiesService.getScriptProperties().getProperty('TEACHER_PIN'); return !!stored && stored.length>=6 && String(pin || '')===stored; }
+function integer_(v,min,max) { var n=Number(v); if (!Number.isInteger(n)||n<min||n>max) throw Error('학년·반·번호 또는 설정 값이 올바르지 않습니다.'); return n; }
+function classKey_(g,c) { return integer_(g,1,6)+'-'+integer_(c,1,30); }
+function validSettings_(s) {
+  s=s||{}; var x={};
+  x.durationSeconds=integer_(s.durationSeconds,5,600); x.countdownSeconds=integer_(s.countdownSeconds,0,15);
+  x.sensitivity=['낮음','보통','높음'].indexOf(s.sensitivity)>=0?s.sensitivity:'보통';
+  x.retryAllowed=s.retryAllowed===true; x.retryLimit=integer_(s.retryLimit,0,20);
+  x.recordMode=s.recordMode==='latest'?'latest':'best'; x.rankingVisible=s.rankingVisible===true; x.activityOpen=s.activityOpen===true;
+  return x;
 }
-
-function appendTo_(ss, name, row) {
-  var sh = ss.getSheetByName(name);
-  if (!sh) {
-    sh = ss.insertSheet(name);
-    sh.appendRow(HEADER);
-    sh.getRange(1, 1, 1, HEADER.length).setFontWeight("bold");
-    sh.setFrozenRows(1);
-  } else if (sh.getLastRow() === 0) {
-    sh.appendRow(HEADER);
-    sh.setFrozenRows(1);
-  }
-  sh.appendRow(row);
+function sheet_(ss,name,head) { var sh=ss.getSheetByName(name); if(!sh) sh=ss.insertSheet(name); if(sh.getLastRow()===0){sh.appendRow(head);sh.setFrozenRows(1);} return sh; }
+function settings_(ss,key) { var sh=sheet_(ss,SETTINGS,['key','json']); var rows=sh.getDataRange().getValues();
+  for(var i=1;i<rows.length;i++) if(rows[i][0]===key) { try{return validSettings_(JSON.parse(rows[i][1]));}catch(e){break;} }
+  return DEFAULTS;
 }
-
-function json_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+function allRecords_(ss,g,c) { var sh=sheet_(ss,RECORDS,HEAD); var rows=sh.getDataRange().getValues(), out=[];
+  for(var i=1;i<rows.length;i++) if(Number(rows[i][2])===g && Number(rows[i][3])===c) out.push({id:String(rows[i][0]),createdAt:String(rows[i][1]),grade:g,classNo:c,number:Number(rows[i][4]),count:Number(rows[i][5]),durationSeconds:Number(rows[i][6]),countdownSeconds:Number(rows[i][7]),sensitivity:String(rows[i][8]),misses:Number(rows[i][9]),bestStreak:Number(rows[i][10])});
+  return out;
 }
+function views_(records,settings,number) {
+  var mine=records.filter(function(r){return r.number===number;});
+  // 기록은 같은 제한시간에서만 비교한다. 순위도 학생별 최고/마지막 기록으로 만든다.
+  var same=records.filter(function(r){return r.durationSeconds===settings.durationSeconds;});
+  var by={}; same.forEach(function(r){var old=by[r.number]; if(!old || (settings.recordMode==='latest' ? r.createdAt>old.createdAt : r.count>old.count)) by[r.number]=r;});
+  var ranking=Object.keys(by).map(function(k){return {number:Number(k),count:by[k].count};}).sort(function(a,b){return b.count-a.count || a.number-b.number;});
+  // 순위 공개 시 번호와 반영 기록만 제공하며 원본 도전 이력은 제공하지 않는다.
+  var pos=ranking.findIndex(function(r){return r.number===number;});
+  return {records:mine,ranking:settings.rankingVisible ? {
+    rank:pos>=0?1+ranking.filter(function(r){return r.count>ranking[pos].count;}).length:null,
+    total:ranking.length,
+    leaders:ranking.slice(0,10).map(function(r){return {number:r.number,count:r.count,rank:1+ranking.filter(function(x){return x.count>r.count;}).length};})
+  }:null};
+}
+function bootstrap_(ss,d) { var g=integer_(d.grade,1,6), c=integer_(d.classNo,1,30), n=integer_(d.number,1,99);
+  var s=settings_(ss,classKey_(g,c)); return Object.assign({ok:true,settings:s},views_(allRecords_(ss,g,c),s,n));
+}
+function record_(ss,d) { var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),n=integer_(d.number,1,99),key=classKey_(g,c);
+  var id=String(d.id||''); if(!/^[a-zA-Z0-9-]{12,80}$/.test(id)) throw Error('기록 ID가 올바르지 않습니다.');
+  var lock=LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var s=settings_(ss,key), sh=sheet_(ss,RECORDS,HEAD), rows=sh.getDataRange().getValues();
+    var old=rows.findIndex(function(r,i){return i>0 && String(r[0])===id;});
+    if(old>=0) { if(Number(rows[old][2])!==g || Number(rows[old][3])!==c || Number(rows[old][4])!==n) throw Error('중복 기록 ID'); return {ok:true,duplicate:true}; }
+    if(!s.activityOpen) throw Error('이 반의 활동이 닫혔습니다.');
+    var duration=integer_(d.durationSeconds,5,600); if(duration!==s.durationSeconds) throw Error('제한시간 설정이 바뀌었습니다. 다시 입장해 주세요.');
+    var count=integer_(d.count,0,5000), attempts=rows.filter(function(r,i){return i>0 && Number(r[2])===g && Number(r[3])===c && Number(r[4])===n && Number(r[6])===duration;}).length;
+    if(attempts >= 1+(s.retryAllowed?s.retryLimit:0)) throw Error('재도전 횟수를 모두 사용했습니다.');
+    var created=new Date().toISOString();
+    sh.appendRow([id,created,g,c,n,count,duration,integer_(d.countdownSeconds,0,15),String(s.sensitivity),integer_(d.misses||0,0,5000),integer_(d.bestStreak||0,0,5000)]);
+    return {ok:true,createdAt:created};
+  } finally {lock.releaseLock();}
+}
+function out_(v) { return ContentService.createTextOutput(JSON.stringify(v)).setMimeType(ContentService.MimeType.JSON); }
