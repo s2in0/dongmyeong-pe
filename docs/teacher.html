@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>JUMPY 교사 화면</title>
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body class="teacher-app">
 <main class="teacher-shell">
@@ -34,6 +34,7 @@
         </section>
         <nav class="teacher-tabs" aria-label="교사 메뉴">
           <button type="button" class="active" data-teacher-tab="settingsCard" aria-selected="true">⚙ 수업 설정</button>
+          <button type="button" data-teacher-tab="medalsCard" aria-selected="false">✦ 메달 설정</button>
           <button type="button" data-teacher-tab="rankingCard" aria-selected="false">🏆 우리 반 순위</button>
           <button type="button" data-teacher-tab="musicCard" aria-selected="false">♫ 음악 줄넘기</button>
         </nav>
@@ -49,6 +50,12 @@
           </div>
           <button id="saveSettings" class="primary">설정 저장</button><p id="saveStatus" class="status-line" role="status"></p>
         </section>
+        <section id="medalsCard" class="teacher-pane hidden">
+          <div class="pane-heading"><div><span class="eyebrow">MEDAL SETUP</span><h2>메달 설정</h2><p class="subtle">모든 반에 공통으로 적용돼요. 같은 제한시간의 최고기록과 도전 횟수를 기준으로 합니다.</p></div></div>
+          <div id="medalEditor" class="medal-editor"></div>
+          <div class="medal-actions"><button id="addMedal" class="secondary">＋ 메달 추가</button><button id="saveMedals" class="primary">메달 저장</button></div>
+          <p id="medalStatus" class="status-line" role="status"></p>
+        </section>
         <section id="rankingCard" class="teacher-pane hidden">
           <div class="pane-heading"><div><span class="eyebrow">CLASS RANKING</span><h2>우리 반 순위</h2><p id="rankRule" class="subtle"></p></div><button id="rankFullscreen" class="secondary presentation-button">⛶ 전체화면</button></div>
           <div id="rankPodium" class="rank-podium"></div><ol id="classRanking" class="rank-list"></ol>
@@ -61,6 +68,6 @@
     </div>
   </section>
 </main>
-<script type="module" src="teacher.js?v=13"></script>
+<script type="module" src="teacher.js?v=14"></script>
 </body>
 </html>
