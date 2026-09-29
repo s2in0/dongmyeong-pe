@@ -12,6 +12,7 @@ var DEFAULT_MEDALS = [
   {id:'steady-star',name:'꾸준한 별',type:'attempts',goal:3,image:'steady-star'}
 ];
 var MEDAL_IMAGES=['first-step','silver-rhythm','sky-jump','steady-star','fire-jump','moon-jump','rainbow-jump','crown-jump'];
+var DEFAULT_MOVES=[{symbol:'○',label:'모아뛰기'},{symbol:'↔',label:'번갈아뛰기'},{symbol:'✕',label:'엇걸기'},{symbol:'◇',label:'옆뛰기'}];
 function doGet() { return out_({ok:true,message:'줄넘기 앱 연결됨'}); }
 function doPost(e) {
   try {
@@ -24,6 +25,15 @@ function doPost(e) {
       return out_(teacherData_(ss,d));
     }
     if (d.type === 'musicSubmit') return out_(musicSubmit_(ss,d));
+    if (d.type === 'saveMoves') {
+      if (!authorized_(d.pin)) return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});
+      var moveKey='__moves__'+classKey_(d.grade,d.classNo),options=validMoveOptions_(d.moves),moveLock=LockService.getScriptLock();moveLock.waitLock(20000);
+      try { var moveSheet=sheet_(ss,SETTINGS,['key','json']),moveRows=moveSheet.getDataRange().getValues();
+        var moveRow=moveRows.findIndex(function(x,i){return i>0&&x[0]===moveKey;});
+        if(moveRow<0) moveSheet.appendRow([moveKey,JSON.stringify(options)]); else moveSheet.getRange(moveRow+1,2).setValue(JSON.stringify(options));
+      } finally { moveLock.releaseLock(); }
+      return out_({ok:true,moveOptions:options});
+    }
     if (d.type === 'saveMedals') {
       if (!authorized_(d.pin)) return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});
       var medals=validMedals_(d.medals),lockMedals=LockService.getScriptLock();lockMedals.waitLock(20000);
@@ -59,6 +69,20 @@ function validSettings_(s) {
   return x;
 }
 function sheet_(ss,name,head) { var sh=ss.getSheetByName(name); if(!sh) sh=ss.insertSheet(name); if(sh.getLastRow()===0){sh.appendRow(head);sh.setFrozenRows(1);} return sh; }
+function validMove_(value) {
+  if(typeof value==='string') { var old=DEFAULT_MOVES.find(function(m){return m.label===value;}); if(!old) throw Error('동작을 확인해 주세요.'); return old; }
+  var symbol=String(value&&value.symbol||'').trim(),label=String(value&&value.label||'').trim();
+  if(!symbol||symbol.length>8||!label||label.length>20||/[\x00-\x1f\x7f]/.test(symbol+label)) throw Error('동작 기호(8자 이하)와 이름(20자 이하)을 확인해 주세요.');
+  return {symbol:symbol,label:label};
+}
+function validMoveOptions_(items) {
+  if(!Array.isArray(items)||items.length>16) throw Error('기본 동작은 최대 16개까지 설정할 수 있어요.');
+  var seen={};return items.map(function(item){var move=validMove_(item),key=move.symbol+'\u0000'+move.label;if(seen[key])throw Error('같은 동작이 중복되었어요.');seen[key]=true;return move;});
+}
+function moves_(ss,key) { var sh=sheet_(ss,SETTINGS,['key','json']),rows=sh.getDataRange().getValues();
+  for(var i=1;i<rows.length;i++) if(rows[i][0]==='__moves__'+key){try{return validMoveOptions_(JSON.parse(rows[i][1]));}catch(e){break;}}
+  return DEFAULT_MOVES;
+}
 function validMedals_(items) {
   if(!Array.isArray(items)||items.length<1||items.length>8) throw Error('메달은 1~8개로 설정해 주세요.');
   var used={}; return items.map(function(item,i){
@@ -98,7 +122,7 @@ function views_(records,settings,number) {
   }:null};
 }
 function bootstrap_(ss,d) { var g=integer_(d.grade,1,6), c=integer_(d.classNo,1,30), n=integer_(d.number,1,99);
-  var s=settings_(ss,classKey_(g,c)); return Object.assign({ok:true,settings:s,medals:medals_(ss)},views_(allRecords_(ss,g,c),s,n));
+  var key=classKey_(g,c),s=settings_(ss,key); return Object.assign({ok:true,settings:s,medals:medals_(ss),moveOptions:moves_(ss,key)},views_(allRecords_(ss,g,c),s,n));
 }
 function record_(ss,d) { var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),n=integer_(d.number,1,99),key=classKey_(g,c);
   var id=String(d.id||''); if(!/^[a-zA-Z0-9-]{12,80}$/.test(id)) throw Error('기록 ID가 올바르지 않습니다.');
@@ -123,9 +147,10 @@ function safeText_(value,max) {
 function musicSubmit_(ss,d) {
   var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),n=integer_(d.number,1,99);
   if(!settings_(ss,classKey_(g,c)).activityOpen) throw Error('이 반의 활동이 닫혔습니다.');
-  var group=safeText_(d.groupName,20),theme=safeText_(d.theme,40),allowed=['모아뛰기','번갈아뛰기','엇걸기','옆뛰기'];
+  var group=safeText_(d.groupName,20),theme=safeText_(d.theme,40);
   var bars=Array.isArray(d.moves)&&typeof d.moves[0]==='string'?[d.moves]:d.moves;
-  if(!Array.isArray(bars)||bars.length<1||bars.length>16||bars.some(function(row){return !Array.isArray(row)||row.length!==4||row.some(function(x){return allowed.indexOf(x)<0;});})) throw Error('4박자 동작 줄을 확인해 주세요.');
+  if(!Array.isArray(bars)||bars.length<1||bars.length>16||bars.some(function(row){return !Array.isArray(row)||row.length!==4;})) throw Error('4박자 동작 줄을 확인해 주세요.');
+  bars=bars.map(function(row){return row.map(validMove_);});
   var lock=LockService.getScriptLock();lock.waitLock(20000);
   try{var sh=sheet_(ss,MUSIC,['createdAt','grade','classNo','number','groupName','theme','moves']);
     sh.appendRow([new Date().toISOString(),g,c,n,group,theme,JSON.stringify(bars)]);
@@ -140,9 +165,9 @@ function teacherData_(ss,d) {
   ranking.forEach(function(r){r.rank=1+ranking.filter(function(x){return x.count>r.count;}).length;});
   var sh=sheet_(ss,MUSIC,['createdAt','grade','classNo','number','groupName','theme','moves']),rows=sh.getDataRange().getValues(),latest=Object.create(null);
   for(var i=1;i<rows.length;i++) if(Number(rows[i][1])===g&&Number(rows[i][2])===c){
-    var key=String(rows[i][4]),moves=[];try{moves=JSON.parse(rows[i][6]);if(moves.length&&typeof moves[0]==='string')moves=[moves];}catch(e){}
+    var key=String(rows[i][4]),moves=[];try{moves=JSON.parse(rows[i][6]);if(moves.length&&typeof moves[0]==='string')moves=[moves];moves=moves.map(function(bar){return bar.map(validMove_);});}catch(e){}
     latest[key]={groupName:key,theme:String(rows[i][5]),number:Number(rows[i][3]),moves:moves,createdAt:String(rows[i][0])};
   }
-  return {ok:true,settings:s,medals:medals_(ss),participants:ranking.map(function(r){return r.number;}),ranking:ranking,music:Object.keys(latest).map(function(k){return latest[k];}).sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);})};
+  return {ok:true,settings:s,medals:medals_(ss),moveOptions:moves_(ss,classKey_(g,c)),participants:ranking.map(function(r){return r.number;}),ranking:ranking,music:Object.keys(latest).map(function(k){return latest[k];}).sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);})};
 }
 function out_(v) { return ContentService.createTextOutput(JSON.stringify(v)).setMimeType(ContentService.MimeType.JSON); }

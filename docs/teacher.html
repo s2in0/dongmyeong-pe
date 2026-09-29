@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>JUMPY 교사 화면</title>
-  <link rel="stylesheet" href="style.css?v=14">
+  <link rel="stylesheet" href="style.css?v=15">
 </head>
 <body class="teacher-app">
 <main class="teacher-shell">
@@ -34,6 +34,7 @@
         </section>
         <nav class="teacher-tabs" aria-label="교사 메뉴">
           <button type="button" class="active" data-teacher-tab="settingsCard" aria-selected="true">⚙ 수업 설정</button>
+          <button type="button" data-teacher-tab="movesCard" aria-selected="false">○ 동작 설정</button>
           <button type="button" data-teacher-tab="medalsCard" aria-selected="false">✦ 메달 설정</button>
           <button type="button" data-teacher-tab="rankingCard" aria-selected="false">🏆 우리 반 순위</button>
           <button type="button" data-teacher-tab="musicCard" aria-selected="false">♫ 음악 줄넘기</button>
@@ -49,6 +50,12 @@
             <div class="teacher-checks"><label class="check"><input id="retryAllowed" type="checkbox"> 재도전 허용</label><label class="check"><input id="rankingVisible" type="checkbox"> 순위 공개</label><label class="check"><input id="activityOpen" type="checkbox"> 활동 열기</label></div>
           </div>
           <button id="saveSettings" class="primary">설정 저장</button><p id="saveStatus" class="status-line" role="status"></p>
+        </section>
+        <section id="movesCard" class="teacher-pane hidden">
+          <div class="pane-heading"><div><span class="eyebrow">MOVE SETUP</span><h2>동작 설정</h2><p class="subtle">이 반 학생들의 동작 선택 목록이에요. 학생은 자기 동작도 추가할 수 있어요.</p></div></div>
+          <div id="moveEditor" class="move-editor"></div>
+          <div class="move-editor-actions"><button id="addTeacherMove" class="secondary" type="button">＋ 기본 동작 추가</button><button id="saveTeacherMoves" class="primary" type="button">동작 목록 저장</button></div>
+          <p id="moveEditorStatus" class="status-line" role="status"></p>
         </section>
         <section id="medalsCard" class="teacher-pane hidden">
           <div class="pane-heading"><div><span class="eyebrow">MEDAL SETUP</span><h2>메달 설정</h2><p class="subtle">모든 반에 공통으로 적용돼요. 같은 제한시간의 최고기록과 도전 횟수를 기준으로 합니다.</p></div></div>
@@ -68,6 +75,6 @@
     </div>
   </section>
 </main>
-<script type="module" src="teacher.js?v=14"></script>
+<script type="module" src="teacher.js?v=15"></script>
 </body>
 </html>
