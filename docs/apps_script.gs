@@ -92,10 +92,11 @@ function musicSubmit_(ss,d) {
   var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),n=integer_(d.number,1,99);
   if(!settings_(ss,classKey_(g,c)).activityOpen) throw Error('이 반의 활동이 닫혔습니다.');
   var group=safeText_(d.groupName,20),theme=safeText_(d.theme,40),allowed=['모아뛰기','번갈아뛰기','엇걸기','옆뛰기'];
-  if(!Array.isArray(d.moves)||d.moves.length!==4||d.moves.some(function(x){return allowed.indexOf(x)<0;})) throw Error('4박자 동작을 확인해 주세요.');
+  var bars=Array.isArray(d.moves)&&typeof d.moves[0]==='string'?[d.moves]:d.moves;
+  if(!Array.isArray(bars)||bars.length<1||bars.length>16||bars.some(function(row){return !Array.isArray(row)||row.length!==4||row.some(function(x){return allowed.indexOf(x)<0;});})) throw Error('4박자 동작 줄을 확인해 주세요.');
   var lock=LockService.getScriptLock();lock.waitLock(20000);
   try{var sh=sheet_(ss,MUSIC,['createdAt','grade','classNo','number','groupName','theme','moves']);
-    sh.appendRow([new Date().toISOString(),g,c,n,group,theme,JSON.stringify(d.moves)]);
+    sh.appendRow([new Date().toISOString(),g,c,n,group,theme,JSON.stringify(bars)]);
     return {ok:true};
   }finally{lock.releaseLock();}
 }
@@ -107,7 +108,7 @@ function teacherData_(ss,d) {
   ranking.forEach(function(r){r.rank=1+ranking.filter(function(x){return x.count>r.count;}).length;});
   var sh=sheet_(ss,MUSIC,['createdAt','grade','classNo','number','groupName','theme','moves']),rows=sh.getDataRange().getValues(),latest=Object.create(null);
   for(var i=1;i<rows.length;i++) if(Number(rows[i][1])===g&&Number(rows[i][2])===c){
-    var key=String(rows[i][4]),moves=[];try{moves=JSON.parse(rows[i][6]);}catch(e){}
+    var key=String(rows[i][4]),moves=[];try{moves=JSON.parse(rows[i][6]);if(moves.length&&typeof moves[0]==='string')moves=[moves];}catch(e){}
     latest[key]={groupName:key,theme:String(rows[i][5]),number:Number(rows[i][3]),moves:moves,createdAt:String(rows[i][0])};
   }
   return {ok:true,settings:s,participants:ranking.map(function(r){return r.number;}),ranking:ranking,music:Object.keys(latest).map(function(k){return latest[k];}).sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);})};
