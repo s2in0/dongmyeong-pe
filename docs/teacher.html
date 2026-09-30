@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>JUMPY 교사 화면</title>
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=16">
 </head>
 <body class="teacher-app">
 <main class="teacher-shell">
@@ -20,8 +20,8 @@
     <div class="teacher-board">
       <aside class="teacher-sidebar">
         <h2>수업 선택</h2>
-        <label for="tGrade">학년</label><input id="tGrade" type="number" min="1" max="6" value="2">
-        <label for="tClass">반</label><input id="tClass" type="number" min="1" max="30" value="3">
+        <label for="tGrade">학년</label><input id="tGrade" type="number" min="1" max="6" value="1">
+        <label for="tClass">반</label><input id="tClass" type="number" min="1" max="30" value="1">
         <button id="loadClass" class="primary">반 불러오기</button>
         <button id="copyStudentLink" class="secondary">학생용 링크 복사</button>
         <button id="teacherLogout" class="secondary">로그아웃</button>
@@ -29,7 +29,7 @@
       </aside>
       <div class="teacher-main">
         <section class="teacher-overview">
-          <div class="teacher-top"><div><span class="eyebrow">LIVE CLASS</span><h1 id="classTitle">2학년 3반</h1></div><button id="refreshClass" class="secondary">새로고침</button></div>
+          <div class="teacher-top"><div><span class="eyebrow">LIVE CLASS</span><h1 id="classTitle">1학년 1반</h1></div><button id="refreshClass" class="secondary">새로고침</button></div>
           <div class="projector-stats"><div><span>기록 참여</span><strong id="participantCount">0명</strong></div><div><span>최고 기록</span><strong id="classBest">—</strong></div><div><span>음악 제출</span><strong id="musicCount">0조</strong></div></div>
         </section>
         <nav class="teacher-tabs" aria-label="교사 메뉴">
@@ -37,6 +37,7 @@
           <button type="button" data-teacher-tab="movesCard" aria-selected="false">○ 동작 설정</button>
           <button type="button" data-teacher-tab="medalsCard" aria-selected="false">✦ 메달 설정</button>
           <button type="button" data-teacher-tab="rankingCard" aria-selected="false">🏆 우리 반 순위</button>
+          <button type="button" data-teacher-tab="recordsCard" aria-selected="false">▤ 반별 기록</button>
           <button type="button" data-teacher-tab="musicCard" aria-selected="false">♫ 음악 줄넘기</button>
         </nav>
         <section id="settingsCard" class="teacher-pane">
@@ -67,6 +68,12 @@
           <div class="pane-heading"><div><span class="eyebrow">CLASS RANKING</span><h2>우리 반 순위</h2><p id="rankRule" class="subtle"></p></div><button id="rankFullscreen" class="secondary presentation-button">⛶ 전체화면</button></div>
           <div id="rankPodium" class="rank-podium"></div><ol id="classRanking" class="rank-list"></ol>
         </section>
+        <section id="recordsCard" class="teacher-pane hidden">
+          <div class="pane-heading"><div><span class="eyebrow">CLASS RECORDS</span><h2>반별 기록</h2><p class="subtle">선택한 반의 측정 기록을 날짜별로 확인해요.</p></div><button id="downloadRecords" type="button" class="secondary">CSV 내려받기</button></div>
+          <div class="record-filters"><label>날짜<input id="recordDate" type="date"></label><label>제한시간<select id="recordDuration"><option value="">전체</option></select></label><label>학생 번호<input id="recordNumber" type="number" min="1" max="99" placeholder="전체"></label><button id="clearRecordFilters" type="button" class="secondary">필터 초기화</button></div>
+          <p id="recordSummary" class="status-line" role="status"></p>
+          <div class="record-table-wrap"><table class="teacher-table record-table"><thead><tr><th>측정일</th><th>번호</th><th>횟수</th><th>제한시간</th></tr></thead><tbody id="classRecords"></tbody></table></div>
+        </section>
         <section id="musicCard" class="teacher-pane hidden">
           <div class="pane-heading"><div><span class="eyebrow">MUSIC JUMP</span><h2>음악 줄넘기 제출</h2><p class="subtle">우리 반의 조별 안무</p></div><button id="musicFullscreen" class="secondary presentation-button">⛶ 전체화면</button></div>
           <div id="musicSubmissions" class="music-wall"></div>
@@ -75,6 +82,6 @@
     </div>
   </section>
 </main>
-<script type="module" src="teacher.js?v=15"></script>
+<script type="module" src="teacher.js?v=16"></script>
 </body>
 </html>
