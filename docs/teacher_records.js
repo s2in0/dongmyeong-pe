@@ -10,7 +10,9 @@ export function recordDay(value) {
 
 export function recordTime(value) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : timeFormatter.format(date);
+  if(Number.isNaN(date.getTime()))return String(value);
+  const parts=timeFormatter.formatToParts(date),part=key=>parts.find(item=>item.type===key).value;
+  return `${part('year')}년 ${Number(part('month'))}월 ${Number(part('day'))}일 ${part('hour')}시 ${part('minute')}분`;
 }
 
 export function filterRecords(records, {day='',duration='',number=''} = {}) {

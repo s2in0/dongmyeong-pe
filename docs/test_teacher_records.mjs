@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {recordDay,filterRecords,summarizeRecords,recordsCsv} from './teacher_records.js';
+import {recordDay,recordTime,filterRecords,summarizeRecords,recordsCsv} from './teacher_records.js';
 
 const records=[
   {number:1,count:20,durationSeconds:30,createdAt:'2026-09-28T01:00:00Z'},
@@ -8,6 +8,7 @@ const records=[
   {number:2,count:40,durationSeconds:30,createdAt:'2026-09-30T01:01:00Z'}
 ];
 assert.equal(recordDay('2026-09-29T15:05:00Z'),'2026-09-30','Dates use the Korean school day, including midnight boundaries.');
+assert.equal(recordTime('2026-09-30T01:00:00Z'),'2026년 9월 30일 10시 00분');
 assert.equal(filterRecords(records,{day:'2026-09-30',duration:'30',number:'1'}).length,1);
 const summary=summarizeRecords(records);
 assert.equal(summary.length,3,'Different time limits produce separate student summaries.');

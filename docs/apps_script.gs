@@ -31,8 +31,9 @@ function doPost(e) {
       try { var moveSheet=sheet_(ss,SETTINGS,['key','json']),moveRows=moveSheet.getDataRange().getValues();
         var moveRow=moveRows.findIndex(function(x,i){return i>0&&x[0]===moveKey;});
         if(moveRow<0) moveSheet.appendRow([moveKey,JSON.stringify(options)]); else moveSheet.getRange(moveRow+1,2).setValue(JSON.stringify(options));
+        var moveResult=updateClassSheetsSafe_(ss,{ok:true,moveOptions:options});
       } finally { moveLock.releaseLock(); }
-      return out_({ok:true,moveOptions:options});
+      return out_(moveResult);
     }
     if (d.type === 'saveMedals') {
       if (!authorized_(d.pin)) return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});
@@ -50,8 +51,9 @@ function doPost(e) {
       try { var s = sheet_(ss, SETTINGS, ['key','json']); var data=s.getDataRange().getValues();
         var row=data.findIndex(function(x,i){return i>0 && x[0]===key;});
         if(row<0) s.appendRow([key,JSON.stringify(next)]); else s.getRange(row+1,2).setValue(JSON.stringify(next));
+        var settingsResult=updateClassSheetsSafe_(ss,{ok:true,settings:next});
       } finally { lock.releaseLock(); }
-      return out_({ok:true,settings:next});
+      return out_(settingsResult);
     }
     if (d.type === 'record') return out_(record_(ss,d));
     return out_({ok:false,error:'알 수 없는 요청'});
@@ -154,7 +156,7 @@ function musicSubmit_(ss,d) {
   var lock=LockService.getScriptLock();lock.waitLock(20000);
   try{var sh=sheet_(ss,MUSIC,['createdAt','grade','classNo','number','groupName','theme','moves']);
     sh.appendRow([new Date().toISOString(),g,c,n,group,theme,JSON.stringify(bars)]);
-    return {ok:true};
+    return updateClassSheetsSafe_(ss,{ok:true});
   }finally{lock.releaseLock();}
 }
 function teacherData_(ss,d) {
@@ -187,63 +189,78 @@ function updateClassSheetsSafe_(ss,result) {
   try{updateClassSheets_(ss);}catch(error){result.sheetViewWarning='반별 시트 갱신 실패: '+String(error.message||error);}
   return result;
 }
-function classSummary_(records,s) {
-  var numbers={},by={},rankScores={};
-  records.forEach(function(r){numbers[r.number]=true;if(r.durationSeconds===s.durationSeconds)(by[r.number]||(by[r.number]=[])).push(r);});
-  var rows=Object.keys(numbers).map(Number).sort(function(a,b){return a-b;}).map(function(number){
-    var attempts=(by[number]||[]).slice().sort(function(a,b){return a.createdAt.localeCompare(b.createdAt);});
-    if(!attempts.length)return [number,'—','—','—',0,'','—','—'];
-    var latest=attempts[attempts.length-1],previous=attempts[attempts.length-2];
-    var best=Math.max.apply(null,attempts.map(function(r){return r.count;}));
-    var score=s.recordMode==='latest'?latest.count:best;rankScores[number]=score;
-    var date=new Date(latest.createdAt);
-    return [number,best,latest.count,previous?latest.count-previous.count:'—',attempts.length,isNaN(date.getTime())?'':date,'',score];
-  });
-  var scores=Object.keys(rankScores).map(function(number){return rankScores[number];});
-  rows.forEach(function(row){if(row[4])row[6]=1+scores.filter(function(score){return score>row[7];}).length;});
-  return {rows:rows,participants:scores.length,best:scores.length?Math.max.apply(null,rows.filter(function(row){return row[4];}).map(function(row){return row[1];})):'—'};
-}
 function updateClassSheets_(ss) {
-  var marker='JUMPY_CLASS_SUMMARY',version='v1',head=['번호','최고기록(회)','최근기록(회)','이전 대비(회)','도전횟수','최근 측정일','반 순위','반영기록(회)'];
+  var marker='JUMPY_CLASS_SUMMARY',version='v1',head=['측정 일시','번호','기록(회)','측정시간(초)','준비시간(초)','당시 민감도','걸린 횟수','최고 연속'];
   var plans=[1,2,3].map(function(c){return {classNo:c,name:'1학년 '+c+'반',sheet:ss.getSheetByName('1학년 '+c+'반')};});
   // 기존 동명 탭에 교사가 넣은 자료가 있으면 보존하며 오류를 알립니다.
   plans.forEach(function(plan){if(plan.sheet&&plan.sheet.getLastRow()>0&&!plan.sheet.getDeveloperMetadata().some(function(m){return m.getKey()===marker&&m.getValue()===version;}))throw Error(plan.name+' 탭에 기존 자료가 있습니다. 다른 이름으로 옮긴 뒤 setupJumpyClassSheets를 실행해 주세요.');});
   var raw=sheet_(ss,RECORDS,HEAD),source=raw.getDataRange().getValues();
   if(source[0].slice(0,HEAD.length).join('|')!==HEAD.join('|'))throw Error('기록 탭의 열 구성을 확인해 주세요.');
+  var musicSheet=sheet_(ss,MUSIC,['createdAt','grade','classNo','number','groupName','theme','moves']);
+  var musicSource=musicSheet.getDataRange().getValues();
   var properties=PropertiesService.getScriptProperties(),saved=properties.getProperties();
   plans.forEach(function(plan){
     var s=settings_(ss,classKey_(1,plan.classNo));
-    var records=source.slice(1).filter(function(row){return Number(row[2])===1&&Number(row[3])===plan.classNo;}).map(function(row){return {number:Number(row[4]),count:Number(row[5]),durationSeconds:Number(row[6]),createdAt:row[1] instanceof Date?row[1].toISOString():String(row[1])};});
-    var summary=classSummary_(records,s),key='jumpy_class_summary_'+ss.getId()+'_'+plan.classNo;
-    var payload=JSON.stringify({version:version,duration:s.durationSeconds,mode:s.recordMode,summary:summary});
+    var records=source.slice(1).filter(function(row){return Number(row[2])===1&&Number(row[3])===plan.classNo;}).map(function(row){return {number:Number(row[4]),count:Number(row[5]),durationSeconds:Number(row[6]),countdownSeconds:Number(row[7]),sensitivity:String(row[8]),misses:Number(row[9]),bestStreak:Number(row[10]),createdAt:row[1] instanceof Date?row[1].toISOString():String(row[1])};});
+    var history=classHistory_(records),key='jumpy_class_summary_'+ss.getId()+'_'+plan.classNo;
+    var moves=moves_(ss,classKey_(1,plan.classNo)),music=classMusicSummary_(musicSource,plan.classNo);
+    var settingsRows=[['제한시간(초)',s.durationSeconds],['준비시간(초)',s.countdownSeconds],['민감도',s.sensitivity],['재도전 허용',s.retryAllowed?'허용':'불가'],['재도전 횟수',s.retryLimit],['반영 기록',s.recordMode==='latest'?'마지막 기록':'최고기록'],['순위 공개',s.rankingVisible?'공개':'비공개'],['활동 상태',s.activityOpen?'열림':'닫힘']];
+    var musicRows=music.map(function(item){return [classSheetText_(item.groupName),classSheetText_(item.theme),item.number,item.createdAt,item.moves.length,classSheetText_(item.moves.map(function(bar,index){return (index+1)+'줄: '+bar.map(function(move){return move.symbol+' '+move.label;}).join(' / ');}).join('\n')),'',''];});
+    var payload=JSON.stringify({version:'v3',settings:s,history:history,moves:moves,music:musicRows});
     var digest=Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,payload));
     var sh=plan.sheet,fresh=!sh||sh.getLastRow()===0;
-    if(!fresh&&saved[key]===digest&&sh.getRange('A1').getValue()===plan.name+' 줄넘기 기록')return;
+    if(!fresh&&saved[key]===digest&&sh.getRange('A1').getValue()===plan.name+' 수업 기록')return;
     if(!sh)sh=ss.insertSheet(plan.name);
-    if(sh.getMaxRows()<summary.rows.length+6)sh.insertRowsAfter(sh.getMaxRows(),summary.rows.length+6-sh.getMaxRows());
+    var requiredRows=history.length+moves.length+musicRows.length+30;
+    if(sh.getMaxRows()<requiredRows)sh.insertRowsAfter(sh.getMaxRows(),requiredRows-sh.getMaxRows());
     if(fresh){
       sh.getRange('A1:H1').merge();sh.getRange('A2:H2').merge();
       sh.setFrozenRows(5);sh.setTabColor('#3988f7');
-      sh.setColumnWidths(1,8,125);sh.setColumnWidth(1,70);sh.setColumnWidth(6,180);
       sh.getRange('A1:H1').setFontSize(18).setFontWeight('bold').setFontColor('#2469d4');
       sh.getRange('A2:H2').setFontColor('#717987');
       sh.getRange('A3:H3').setBackground('#eaf3ff');
       sh.getRange('A5:H5').setBackground('#3988f7').setFontColor('#ffffff').setFontWeight('bold');
     }
-    sh.getRange('A1').setValue(plan.name+' 줄넘기 기록');
-    sh.getRange('A2').setValue(s.durationSeconds+'초 기록 · 번호순 · '+(s.recordMode==='latest'?'마지막 기록':'최고기록')+'으로 순위 계산 · 원본은 기록 탭');
-    sh.getRange('A3:H3').setValues([['참여 학생',summary.participants,'최고기록(회)',summary.best,'측정시간(초)',s.durationSeconds,'반영기준',s.recordMode==='latest'?'마지막 기록':'최고기록']]);
+    sh.setColumnWidths(1,8,125);sh.setColumnWidth(1,220);sh.setColumnWidth(2,65);sh.setColumnWidth(6,180);
+    sh.getRange('A1').setValue(plan.name+' 수업 기록');
+    sh.getRange('A2').setValue('현재 설정: '+s.durationSeconds+'초 · 준비 '+s.countdownSeconds+'초 · 민감도 '+s.sensitivity+' · '+(s.recordMode==='latest'?'마지막 기록':'최고기록')+' 반영 / 전체 기록 최신순');
+    sh.getRange('A3:H3').setValues([['참여 학생',new Set(records.map(function(record){return record.number;})).size,'측정 기록',history.length,'현재 제한시간(초)',s.durationSeconds,'활동 상태',s.activityOpen?'열림':'닫힘']]);
     sh.getRange('A5:H5').setValues([head]);
     var oldRows=Math.max(0,sh.getLastRow()-5);
-    if(oldRows)sh.getRange(6,1,oldRows,8).clearContent();
-    if(summary.rows.length){
-      sh.getRange(6,1,summary.rows.length,8).setValues(summary.rows);
-      sh.getRange(6,2,summary.rows.length,3).setNumberFormat('0');
-      sh.getRange(6,4,summary.rows.length,1).setNumberFormat('+0;-0;0');
-      sh.getRange(6,6,summary.rows.length,1).setNumberFormat('yyyy-mm-dd hh:mm');
+    if(oldRows){sh.getRange(6,1,oldRows,8).clearContent();sh.getRange(6,1,oldRows,8).setBackground('#ffffff').setFontColor('#20252d').setFontWeight('normal').setNumberFormat('General').setWrap(false);}
+    if(history.length){
+      sh.getRange(6,1,history.length,8).setValues(history);
+      sh.getRange(6,1,history.length,1).setNumberFormat('yyyy"년" m"월" d"일" hh"시" mm"분"');
+      sh.getRange(6,2,history.length,4).setNumberFormat('0');
     }else sh.getRange('A6').setValue('아직 기록이 없습니다.');
+    var settingsRow=8+Math.max(1,history.length);
+    classSectionHeading_(sh,settingsRow,'이 반 수업 설정');
+    sh.getRange(settingsRow+1,1,settingsRows.length,2).setValues(settingsRows);
+    var movesRow=settingsRow+settingsRows.length+3;
+    classSectionHeading_(sh,movesRow,'이 반 기본 동작');
+    if(moves.length)sh.getRange(movesRow+1,1,moves.length,2).setValues(moves.map(function(move){return [classSheetText_(move.symbol),classSheetText_(move.label)];}));
+    else sh.getRange(movesRow+1,1).setValue('등록된 기본 동작이 없습니다.');
+    var musicRow=movesRow+Math.max(1,moves.length)+3;
+    classSectionHeading_(sh,musicRow,'이 반 음악 줄넘기 · 조별 최근 제출');
+    sh.getRange(musicRow+1,1,1,8).setValues([['조 이름','주제','제출 번호','최근 제출일','동작 줄 수','안무','','']]);
+    sh.getRange(musicRow+1,1,1,8).setBackground('#eaf3ff').setFontWeight('bold');
+    if(musicRows.length){sh.getRange(musicRow+2,1,musicRows.length,8).setValues(musicRows);sh.getRange(musicRow+2,4,musicRows.length,1).setNumberFormat('yyyy"년" m"월" d"일" hh"시" mm"분"');sh.getRange(musicRow+2,6,musicRows.length,1).setWrap(true);}
+    else sh.getRange(musicRow+2,1).setValue('아직 제출한 조가 없습니다.');
     if(fresh)sh.addDeveloperMetadata(marker,version);
     properties.setProperty(key,digest);
   });
+}
+function classHistory_(records){return records.slice().sort(function(a,b){return b.createdAt.localeCompare(a.createdAt)||a.number-b.number;}).map(function(record){var date=new Date(record.createdAt);return [isNaN(date.getTime())?'':date,record.number,record.count,record.durationSeconds,record.countdownSeconds,record.sensitivity,record.misses,record.bestStreak];});}
+function classSectionHeading_(sh,row,title){sh.getRange(row,1,1,8).setBackground('#eaf3ff').setFontColor('#2469d4').setFontWeight('bold');sh.getRange(row,1).setValue(title);}
+function classSheetText_(value){var text=String(value||'');return /^[=+\-@\t\r]/.test(text)?"'"+text:text;}
+function classMusicSummary_(source,classNo){
+  var latest=Object.create(null);
+  source.slice(1).forEach(function(row){
+    if(Number(row[1])!==1||Number(row[2])!==classNo)return;
+    var key=String(row[4]),date=row[0] instanceof Date?row[0].toISOString():String(row[0]),bars=[];
+    try{bars=JSON.parse(row[6]);if(bars.length&&typeof bars[0]==='string')bars=[bars];bars=bars.map(function(bar){return bar.map(validMove_);});}catch(error){bars=[];}
+    if(!latest[key]||date>=latest[key].stamp)latest[key]={groupName:key,theme:String(row[5]),number:Number(row[3]),createdAt:isNaN(new Date(date).getTime())?'':new Date(date),stamp:date,moves:bars};
+  });
+  return Object.keys(latest).map(function(key){return latest[key];}).sort(function(a,b){return b.stamp.localeCompare(a.stamp);});
 }
 function out_(v) { return ContentService.createTextOutput(JSON.stringify(v)).setMimeType(ContentService.MimeType.JSON); }

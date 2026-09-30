@@ -1,10 +1,10 @@
-import {recordDay,recordTime,filterRecords,summarizeRecords,recordsCsv} from './teacher_records.js?v=17';
+import {recordDay,recordTime,filterRecords,summarizeRecords,recordsCsv} from './teacher_records.js?v=21';
 import {createRankingMotion,showAnimatedCount,podiumGroups,reducedMotion} from './ranking_motion.js?v=19';
 const $=id=>document.getElementById(id);
 const DEFAULT_URL='https://script.google.com/macros/s/AKfycbzeU4BDW7u8fluc1OT5i-C1wYiMAHuzBT2myOpQbi89GcR6i8rHx5mLBVoWlT0IcRt6zQ/exec';
 $('teacherUrl').value=localStorage.getItem('jumpy_teacher_url')||DEFAULT_URL;
 let pin='',url='',timer=null,settingsDirty=false,medalsDirty=false,movesDirty=false,presenting=null,classRecords=[],loadedClass=null;
-let recordView='students',recordsAvailable=false,recordDetails=new Set(),loadSequence=0,classLoading=false,classWritePending=false;
+let recordView='history',recordsAvailable=false,recordDetails=new Set(),loadSequence=0,classLoading=false,classWritePending=false;
 let latestRanking=[],rankingSettings=null,rankingScope='',rankFinalMode=false,finalSnapshot=null,finalTimers=[],pollTicks=0;
 const rememberedClass=Number(localStorage.getItem('jumpy_teacher_class'));
 if([1,2,3].includes(rememberedClass))$('tClass').value=rememberedClass;
@@ -98,7 +98,8 @@ function renderRecords(){
 function setRecordOptions(id,values,label,selected){const select=$(id),all=element('option','','전체');all.value='';select.replaceChildren(all);for(const value of values){const option=element('option','',label(value));option.value=value;select.append(option)}select.value=[...select.options].some(option=>option.value===String(selected))?selected:''}
 function setRecords(records,id,settings,classChanged){
   recordsAvailable=Array.isArray(records);classRecords=recordsAvailable?records:[];loadedClass=id;
-  const duration=classChanged?String(settings.durationSeconds):$('recordDuration').value,number=classChanged?'':$('recordNumber').value;
+  const duration=classChanged?'':$('recordDuration').value,number=classChanged?'':$('recordNumber').value;
+  $('recordClassSettings').textContent=`현재 수업 설정 · ${settings.durationSeconds}초 측정 · 준비 ${settings.countdownSeconds}초 · 민감도 ${settings.sensitivity} · ${settings.recordMode==='latest'?'마지막 기록':'최고기록'} 반영`;
   if(classChanged){$('recordDate').value='';recordDetails.clear()}
   setRecordOptions('recordDuration',[...new Set([settings.durationSeconds,...classRecords.map(row=>row.durationSeconds)])].sort((a,b)=>a-b),value=>`${value}초`,duration);
   setRecordOptions('recordNumber',[...new Set(classRecords.map(row=>row.number))].sort((a,b)=>a-b),value=>`${value}번`,number);renderRecords();
