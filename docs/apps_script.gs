@@ -130,14 +130,14 @@ function record_(ss,d) { var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),
   try {
     var s=settings_(ss,key), sh=sheet_(ss,RECORDS,HEAD), rows=sh.getDataRange().getValues();
     var old=rows.findIndex(function(r,i){return i>0 && String(r[0])===id;});
-    if(old>=0) { if(Number(rows[old][2])!==g || Number(rows[old][3])!==c || Number(rows[old][4])!==n) throw Error('중복 기록 ID'); return {ok:true,duplicate:true}; }
+    if(old>=0) { if(Number(rows[old][2])!==g || Number(rows[old][3])!==c || Number(rows[old][4])!==n) throw Error('중복 기록 ID'); return updateClassSheetsSafe_(ss,{ok:true,duplicate:true}); }
     if(!s.activityOpen) throw Error('이 반의 활동이 닫혔습니다.');
     var duration=integer_(d.durationSeconds,5,600); if(duration!==s.durationSeconds) throw Error('제한시간 설정이 바뀌었습니다. 다시 입장해 주세요.');
     var count=integer_(d.count,0,5000), attempts=rows.filter(function(r,i){return i>0 && Number(r[2])===g && Number(r[3])===c && Number(r[4])===n && Number(r[6])===duration;}).length;
     if(attempts >= 1+(s.retryAllowed?s.retryLimit:0)) throw Error('재도전 횟수를 모두 사용했습니다.');
     var created=new Date().toISOString();
     sh.appendRow([id,created,g,c,n,count,duration,integer_(d.countdownSeconds,0,15),String(s.sensitivity),integer_(d.misses||0,0,5000),integer_(d.bestStreak||0,0,5000)]);
-    return {ok:true,createdAt:created};
+    return updateClassSheetsSafe_(ss,{ok:true,createdAt:created});
   } finally {lock.releaseLock();}
 }
 function safeText_(value,max) {
@@ -168,6 +168,82 @@ function teacherData_(ss,d) {
     var key=String(rows[i][4]),moves=[];try{moves=JSON.parse(rows[i][6]);if(moves.length&&typeof moves[0]==='string')moves=[moves];moves=moves.map(function(bar){return bar.map(validMove_);});}catch(e){}
     latest[key]={groupName:key,theme:String(rows[i][5]),number:Number(rows[i][3]),moves:moves,createdAt:String(rows[i][0])};
   }
-  return {ok:true,settings:s,medals:medals_(ss),moveOptions:moves_(ss,classKey_(g,c)),participants:ranking.map(function(r){return r.number;}),ranking:ranking,records:all.map(function(r){return {createdAt:r.createdAt,number:r.number,count:r.count,durationSeconds:r.durationSeconds};}),music:Object.keys(latest).map(function(k){return latest[k];}).sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);})};
+  var result={ok:true,settings:s,medals:medals_(ss),moveOptions:moves_(ss,classKey_(g,c)),participants:ranking.map(function(r){return r.number;}),ranking:ranking,records:all.map(function(r){return {createdAt:r.createdAt,number:r.number,count:r.count,durationSeconds:r.durationSeconds};}),music:Object.keys(latest).map(function(k){return latest[k];}).sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);})};
+  var viewLock=LockService.getScriptLock();
+  if(viewLock.tryLock(1000)){try{updateClassSheetsSafe_(ss,result);}finally{viewLock.releaseLock();}}
+  else result.sheetViewWarning='반별 시트 갱신을 기다리고 있습니다. 다음 조회 때 다시 갱신합니다.';
+  return result;
+}
+/** Apps Script 편집기에서 한 번 실행하면 기존 기록도 세 반 요약 탭에 반영됩니다. */
+function setupJumpyClassSheets() {
+  var ss=SpreadsheetApp.getActiveSpreadsheet(),lock=LockService.getScriptLock();
+  if(!ss)throw Error('앱에 연결된 스프레드시트의 Apps Script에서 실행해 주세요.');
+  lock.waitLock(20000);
+  try{updateClassSheets_(ss);return {ok:true,sheets:['1학년 1반','1학년 2반','1학년 3반']};}
+  finally{lock.releaseLock();}
+}
+// 호출자가 보유한 저장/조회 잠금 안에서 실행합니다. 요약 실패로 원본 저장을 실패 처리하지 않습니다.
+function updateClassSheetsSafe_(ss,result) {
+  try{updateClassSheets_(ss);}catch(error){result.sheetViewWarning='반별 시트 갱신 실패: '+String(error.message||error);}
+  return result;
+}
+function classSummary_(records,s) {
+  var numbers={},by={},rankScores={};
+  records.forEach(function(r){numbers[r.number]=true;if(r.durationSeconds===s.durationSeconds)(by[r.number]||(by[r.number]=[])).push(r);});
+  var rows=Object.keys(numbers).map(Number).sort(function(a,b){return a-b;}).map(function(number){
+    var attempts=(by[number]||[]).slice().sort(function(a,b){return a.createdAt.localeCompare(b.createdAt);});
+    if(!attempts.length)return [number,'—','—','—',0,'','—','—'];
+    var latest=attempts[attempts.length-1],previous=attempts[attempts.length-2];
+    var best=Math.max.apply(null,attempts.map(function(r){return r.count;}));
+    var score=s.recordMode==='latest'?latest.count:best;rankScores[number]=score;
+    var date=new Date(latest.createdAt);
+    return [number,best,latest.count,previous?latest.count-previous.count:'—',attempts.length,isNaN(date.getTime())?'':date,'',score];
+  });
+  var scores=Object.keys(rankScores).map(function(number){return rankScores[number];});
+  rows.forEach(function(row){if(row[4])row[6]=1+scores.filter(function(score){return score>row[7];}).length;});
+  return {rows:rows,participants:scores.length,best:scores.length?Math.max.apply(null,rows.filter(function(row){return row[4];}).map(function(row){return row[1];})):'—'};
+}
+function updateClassSheets_(ss) {
+  var marker='JUMPY_CLASS_SUMMARY',version='v1',head=['번호','최고기록(회)','최근기록(회)','이전 대비(회)','도전횟수','최근 측정일','반 순위','반영기록(회)'];
+  var plans=[1,2,3].map(function(c){return {classNo:c,name:'1학년 '+c+'반',sheet:ss.getSheetByName('1학년 '+c+'반')};});
+  // 기존 동명 탭에 교사가 넣은 자료가 있으면 보존하며 오류를 알립니다.
+  plans.forEach(function(plan){if(plan.sheet&&plan.sheet.getLastRow()>0&&!plan.sheet.getDeveloperMetadata().some(function(m){return m.getKey()===marker&&m.getValue()===version;}))throw Error(plan.name+' 탭에 기존 자료가 있습니다. 다른 이름으로 옮긴 뒤 setupJumpyClassSheets를 실행해 주세요.');});
+  var raw=sheet_(ss,RECORDS,HEAD),source=raw.getDataRange().getValues();
+  if(source[0].slice(0,HEAD.length).join('|')!==HEAD.join('|'))throw Error('기록 탭의 열 구성을 확인해 주세요.');
+  var properties=PropertiesService.getScriptProperties(),saved=properties.getProperties();
+  plans.forEach(function(plan){
+    var s=settings_(ss,classKey_(1,plan.classNo));
+    var records=source.slice(1).filter(function(row){return Number(row[2])===1&&Number(row[3])===plan.classNo;}).map(function(row){return {number:Number(row[4]),count:Number(row[5]),durationSeconds:Number(row[6]),createdAt:row[1] instanceof Date?row[1].toISOString():String(row[1])};});
+    var summary=classSummary_(records,s),key='jumpy_class_summary_'+ss.getId()+'_'+plan.classNo;
+    var payload=JSON.stringify({version:version,duration:s.durationSeconds,mode:s.recordMode,summary:summary});
+    var digest=Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,payload));
+    var sh=plan.sheet,fresh=!sh||sh.getLastRow()===0;
+    if(!fresh&&saved[key]===digest&&sh.getRange('A1').getValue()===plan.name+' 줄넘기 기록')return;
+    if(!sh)sh=ss.insertSheet(plan.name);
+    if(sh.getMaxRows()<summary.rows.length+6)sh.insertRowsAfter(sh.getMaxRows(),summary.rows.length+6-sh.getMaxRows());
+    if(fresh){
+      sh.getRange('A1:H1').merge();sh.getRange('A2:H2').merge();
+      sh.setFrozenRows(5);sh.setTabColor('#3988f7');
+      sh.setColumnWidths(1,8,125);sh.setColumnWidth(1,70);sh.setColumnWidth(6,180);
+      sh.getRange('A1:H1').setFontSize(18).setFontWeight('bold').setFontColor('#2469d4');
+      sh.getRange('A2:H2').setFontColor('#717987');
+      sh.getRange('A3:H3').setBackground('#eaf3ff');
+      sh.getRange('A5:H5').setBackground('#3988f7').setFontColor('#ffffff').setFontWeight('bold');
+    }
+    sh.getRange('A1').setValue(plan.name+' 줄넘기 기록');
+    sh.getRange('A2').setValue(s.durationSeconds+'초 기록 · 번호순 · '+(s.recordMode==='latest'?'마지막 기록':'최고기록')+'으로 순위 계산 · 원본은 기록 탭');
+    sh.getRange('A3:H3').setValues([['참여 학생',summary.participants,'최고기록(회)',summary.best,'측정시간(초)',s.durationSeconds,'반영기준',s.recordMode==='latest'?'마지막 기록':'최고기록']]);
+    sh.getRange('A5:H5').setValues([head]);
+    var oldRows=Math.max(0,sh.getLastRow()-5);
+    if(oldRows)sh.getRange(6,1,oldRows,8).clearContent();
+    if(summary.rows.length){
+      sh.getRange(6,1,summary.rows.length,8).setValues(summary.rows);
+      sh.getRange(6,2,summary.rows.length,3).setNumberFormat('0');
+      sh.getRange(6,4,summary.rows.length,1).setNumberFormat('+0;-0;0');
+      sh.getRange(6,6,summary.rows.length,1).setNumberFormat('yyyy-mm-dd hh:mm');
+    }else sh.getRange('A6').setValue('아직 기록이 없습니다.');
+    if(fresh)sh.addDeveloperMetadata(marker,version);
+    properties.setProperty(key,digest);
+  });
 }
 function out_(v) { return ContentService.createTextOutput(JSON.stringify(v)).setMimeType(ContentService.MimeType.JSON); }

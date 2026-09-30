@@ -128,7 +128,7 @@ async function loadClass(resetSettings=false,quiet=false,force=false){
     if(classChanged||resetSettings||!movesDirty){moveOptionsDraft=(Array.isArray(data.moveOptions)?data.moveOptions:defaultMoves).map(move=>({...move}));movesDirty=false;renderMoveEditor()}
     if(!medalsDirty){medalsDraft=(Array.isArray(data.medals)&&data.medals.length?data.medals:defaultMedals).map(medal=>({...medal}));renderMedalEditor()}
     if(classChanged){$('saveStatus').textContent='';$('moveEditorStatus').textContent=''}
-    localStorage.setItem('jumpy_teacher_class',id.classNo);$('teacherStatus').textContent=`${new Date().toLocaleTimeString('ko-KR')} 업데이트`;return data;
+    localStorage.setItem('jumpy_teacher_class',id.classNo);$('teacherStatus').textContent=data.sheetViewWarning||`${new Date().toLocaleTimeString('ko-KR')} 업데이트`;return data;
   }catch(error){if(sequence!==loadSequence)return null;if(loadedClass){$('tGrade').value=loadedClass.grade;$('tClass').value=loadedClass.classNo;updateClassPicker()}$('teacherStatus').textContent=`조회 실패: ${error.message}`;throw error}
   finally{if(sequence===loadSequence)setClassLoading(false)}
 }
