@@ -1,5 +1,5 @@
-const CACHE='jump-rope-pwa-v16';
-const ASSETS=['./','./index.html','./style.css','./app.js','./teacher.html','./teacher.js','./jump_counter.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./apple-touch-icon.png','./medals/first-step.svg','./medals/silver-rhythm.svg','./medals/sky-jump.svg','./medals/steady-star.svg','./medals/fire-jump.svg','./medals/moon-jump.svg','./medals/rainbow-jump.svg','./medals/crown-jump.svg'];
+const CACHE='jump-rope-pwa-v17';
+const ASSETS=['./','./index.html','./style.css','./app.js','./teacher.html','./teacher.js','./teacher_records.js','./jump_counter.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./apple-touch-icon.png','./medals/first-step.svg','./medals/silver-rhythm.svg','./medals/sky-jump.svg','./medals/steady-star.svg','./medals/fire-jump.svg','./medals/moon-jump.svg','./medals/rainbow-jump.svg','./medals/crown-jump.svg'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{
