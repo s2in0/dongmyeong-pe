@@ -1,5 +1,5 @@
 // Load camera inference only when measurement starts; music editing works without it.
-import {createRankingMotion,showAnimatedCount} from './ranking_motion.js?v=18';
+import {createRankingMotion,showAnimatedCount} from './ranking_motion.js?v=19';
 const $=id=>document.getElementById(id), KEY='jr_pwa_v1';
 const DEFAULT_SHEET_URL='https://script.google.com/macros/s/AKfycbzeU4BDW7u8fluc1OT5i-C1wYiMAHuzBT2myOpQbi89GcR6i8rHx5mLBVoWlT0IcRt6zQ/exec';
 const defaults={durationSeconds:30,countdownSeconds:3,sensitivity:'보통',retryAllowed:true,retryLimit:2,recordMode:'best',rankingVisible:true,activityOpen:true};

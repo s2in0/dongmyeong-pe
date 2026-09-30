@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>JUMPY 교사 화면</title>
-  <link rel="stylesheet" href="style.css?v=18">
+  <link rel="stylesheet" href="style.css?v=19">
 </head>
 <body class="teacher-app">
 <main class="teacher-shell">
@@ -72,7 +72,7 @@
           <div class="pane-heading"><div><span class="eyebrow">CLASS RANKING</span><h2>우리 반 순위</h2><p id="rankRule" class="subtle"></p></div><button id="rankFullscreen" class="secondary presentation-button">⛶ 전체화면</button></div>
           <div class="ranking-actions"><span id="rankLiveStatus" class="ranking-live-label" role="status">실시간 순위</span><button id="showFinalRanking" type="button" class="primary" disabled>최종 순위 발표</button></div>
           <div id="rankLiveBoard"><div id="rankPodium" class="rank-podium"></div><ol id="classRanking" class="rank-list"></ol></div>
-          <div id="rankFinalStage" class="final-ranking hidden"><div class="final-ranking-heading"><span class="eyebrow">FINAL RANKING</span><h3 id="finalRankTitle" aria-live="polite">최종 순위</h3><p id="finalRankRule" class="subtle"></p></div><div id="finalRankPodium" class="rank-podium final-podium"></div><div class="final-ranking-actions"><button id="replayFinalRanking" type="button" class="secondary">다시 발표</button><button id="backToLiveRanking" type="button" class="primary">실시간 순위로</button></div></div>
+          <div id="rankFinalStage" class="final-ranking hidden"><div class="final-ranking-heading"><span class="eyebrow">FINAL RANKING</span><h3 id="finalRankTitle" aria-live="polite">최종 순위</h3><p id="finalRankRule" class="subtle"></p></div><div class="final-podium-stage"><div id="finalRankCountdown" class="final-rank-countdown hidden" aria-hidden="true"></div><div id="finalRankPodium" class="rank-podium final-podium"></div></div><div class="final-ranking-actions"><button id="replayFinalRanking" type="button" class="secondary">다시 발표</button><button id="backToLiveRanking" type="button" class="primary">실시간 순위로</button></div></div>
         </section>
         <section id="recordsCard" class="teacher-pane hidden">
           <div class="pane-heading"><div><span class="eyebrow">CLASS RECORDS</span><h2>반별 기록</h2></div><button id="downloadRecords" type="button" class="secondary">CSV 내려받기</button></div>
@@ -91,6 +91,6 @@
     </div>
   </section>
 </main>
-<script type="module" src="teacher.js?v=18"></script>
+<script type="module" src="teacher.js?v=19"></script>
 </body>
 </html>

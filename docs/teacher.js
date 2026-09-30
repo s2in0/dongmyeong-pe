@@ -1,5 +1,5 @@
 import {recordDay,recordTime,filterRecords,summarizeRecords,recordsCsv} from './teacher_records.js?v=17';
-import {createRankingMotion,showAnimatedCount,podiumGroups,reducedMotion} from './ranking_motion.js?v=18';
+import {createRankingMotion,showAnimatedCount,podiumGroups,reducedMotion} from './ranking_motion.js?v=19';
 const $=id=>document.getElementById(id);
 const DEFAULT_URL='https://script.google.com/macros/s/AKfycbzeU4BDW7u8fluc1OT5i-C1wYiMAHuzBT2myOpQbi89GcR6i8rHx5mLBVoWlT0IcRt6zQ/exec';
 $('teacherUrl').value=localStorage.getItem('jumpy_teacher_url')||DEFAULT_URL;
@@ -30,8 +30,12 @@ const rankingMotion=createRankingMotion($('classRanking'),{
   build(row){const li=element('li','rank-entry'),place=element('span','rank-position'),student=element('strong','rank-student'),number=element('span','',`${row.number}번`),movement=element('small','rank-movement'),track=element('span','rank-track'),fill=element('span','rank-fill'),score=element('b','rank-score'),tries=element('small','rank-attempts');student.append(number,movement);track.append(fill);li.append(place,student,track,score,tries);li.rankParts={place,movement,fill,score,tries};return li},
   patch(li,row,old,{animate}){const {place,movement,fill,score,tries}=li.rankParts;place.textContent=`${row.rank}위`;tries.textContent=`${row.attempts}번 도전`;fill.style.width=`${Math.max(5,row.count/Math.max(1,latestRanking[0]?.count||1)*100)}%`;showAnimatedCount(score,row.count,{animate});const change=old?old.rank-row.rank:0;movement.textContent=animate&&change?`${change>0?'▲':'▼'} ${Math.abs(change)}`:'';movement.classList.toggle('rank-up',change>0);li.classList.toggle('rank-rising',animate&&change>0);li.setAttribute('aria-label',`${row.rank}위 ${row.number}번 ${row.count}회`)}
 });
-let livePodiumScope='';
-function renderLivePodium(rows,scope){const podium=$('rankPodium'),groups=podiumGroups(rows),fresh=scope!==livePodiumScope;livePodiumScope=scope;const previous=new Map([...podium.children].map(card=>[Number(card.dataset.rank),card]));if(fresh){podium.replaceChildren();previous.clear()}const ranks=new Set(groups.map(group=>group.rank));for(const [rank,card] of previous)if(!ranks.has(rank))card.remove();for(const group of groups){let card=previous.get(group.rank);if(!card){card=element('div',`podium-card place-${group.rank}`);card.dataset.rank=group.rank;const place=element('span','podium-place'),student=element('strong','podium-student'),score=element('b','podium-score');card.append(place,student,score);card.rankParts={place,student,score}}const {place,student,score}=card.rankParts;place.textContent=`${group.numbers.length>1?'공동 ':''}${group.rank}위`;student.textContent=group.numbers.map(number=>`${number}번`).join(' · ');showAnimatedCount(score,group.count,{animate:!fresh&&podium.getClientRects().length>0});podium.append(card)}}
+const livePodiumMotion=createRankingMotion($('rankPodium'),{
+  getKey:group=>group.numbers.join('-'),
+  build(){const card=element('div','podium-card'),place=element('span','podium-place'),student=element('strong','podium-student'),score=element('b','podium-score');card.append(place,student,score);card.rankParts={place,student,score};return card},
+  patch(card,group,old,{animate}){const {place,student,score}=card.rankParts;card.className=`podium-card place-${group.rank}`;card.dataset.rank=group.rank;place.textContent=`${group.numbers.length>1?'공동 ':''}${group.rank}위`;student.textContent=group.numbers.map(number=>`${number}번`).join(' · ');showAnimatedCount(score,group.count,{animate})}
+});
+function renderLivePodium(rows,scope){livePodiumMotion.render(podiumGroups(rows),{key:scope})}
 function renderRanking(rows,settings){
   const scope=`${$('tGrade').value}-${$('tClass').value}-${settings.durationSeconds}-${settings.recordMode}`;
   latestRanking=rows.map(row=>({...row}));rankingSettings={...settings};rankingScope=scope;
@@ -41,16 +45,22 @@ function renderRanking(rows,settings){
   if(!rows.length){rankingMotion.reset();$('classRanking').append(element('li','board-empty','아직 기록이 없어요.'));return}
   if($('classRanking').querySelector('.board-empty'))$('classRanking').replaceChildren();rankingMotion.render(rows,{key:scope});
 }
-function cancelFinalTimers(){for(const timer of finalTimers)clearTimeout(timer);finalTimers=[];for(const card of $('finalRankPodium').children)for(const animation of card.getAnimations?.()||[])animation.cancel()}
-function leaveFinalRanking(){cancelFinalTimers();rankFinalMode=false;finalSnapshot=null;$('rankFinalStage').classList.add('hidden');$('rankLiveBoard').classList.remove('hidden');$('showFinalRanking').classList.remove('hidden');$('rankLiveStatus').textContent='실시간 · 5초마다 갱신';$('rankLiveStatus').classList.remove('ranking-paused')}
+function cancelFinalTimers(){for(const timer of finalTimers)clearTimeout(timer);finalTimers=[];for(const node of [$('finalRankCountdown'),...$('finalRankPodium').children])for(const animation of node.getAnimations?.()||[])animation.cancel()}
+function leaveFinalRanking(){cancelFinalTimers();rankFinalMode=false;finalSnapshot=null;$('finalRankCountdown').classList.add('hidden');$('rankFinalStage').classList.add('hidden');$('rankLiveBoard').classList.remove('hidden');$('showFinalRanking').classList.remove('hidden');$('rankLiveStatus').textContent='실시간 · 5초마다 갱신';$('rankLiveStatus').classList.remove('ranking-paused')}
 function playFinalRanking(){
   if(!finalSnapshot)return;cancelFinalTimers();rankFinalMode=true;$('rankLiveBoard').classList.add('hidden');$('rankFinalStage').classList.remove('hidden');$('showFinalRanking').classList.add('hidden');$('rankLiveStatus').textContent='최종 순위 발표';$('rankLiveStatus').classList.add('ranking-paused');
-  $('finalRankTitle').textContent='최종 순위';$('finalRankRule').textContent=finalSnapshot.rule;const podium=$('finalRankPodium');podium.replaceChildren();
+  const still=reducedMotion(),countdown=$('finalRankCountdown');
+  $('finalRankTitle').textContent=still?'최종 순위':'곧 최종 순위를 발표합니다';$('finalRankRule').textContent=finalSnapshot.rule;const podium=$('finalRankPodium');podium.replaceChildren();
+  countdown.classList.toggle('hidden',still);
+  if(!still){
+    const tick=value=>{countdown.textContent=String(value);countdown.animate?.([{opacity:0,transform:'scale(.75)'},{opacity:1,transform:'scale(1)',offset:.35},{opacity:0,transform:'scale(1.12)'}],{duration:900,easing:'ease-out'})};
+    tick(3);finalTimers.push(setTimeout(()=>tick(2),1000),setTimeout(()=>tick(1),2000),setTimeout(()=>{countdown.classList.add('hidden');$('finalRankTitle').textContent='최종 순위'},3000));
+  }
   const groups=podiumGroups(finalSnapshot.rows).sort((a,b)=>b.rank-a.rank);
   for(const [index,group] of groups.entries()){
     const card=element('div',`podium-card place-${group.rank} final-winner-card`),place=element('span','final-place-badge',`${group.rank}`),caption=element('span','podium-place',`${group.numbers.length>1?'공동 ':''}${group.rank}등`),student=element('strong','podium-student',group.numbers.map(number=>`${number}번`).join(' · ')),score=element('b','podium-score','0회');score.dataset.count='0';card.setAttribute('aria-hidden','true');card.append(place,caption,student,score);podium.append(card);
     const reveal=()=>{card.classList.add('winner-revealed');card.setAttribute('aria-hidden','false');showAnimatedCount(score,group.count,{animate:true,duration:650});$('finalRankTitle').textContent=index===groups.length-1?'우리 반 최종 순위':`${group.numbers.length>1?'공동 ':''}${group.rank}등`;if(!reducedMotion()){card.animate?.([{opacity:0,transform:'translateY(80px) scale(.85)'},{opacity:1,transform:'translateY(-8px) scale(1.025)',offset:.8},{opacity:1,transform:'translateY(0) scale(1)'}],{duration:720,easing:'cubic-bezier(.16,1,.3,1)'});if(group.rank===1)winnerBurst(card)}};
-    if(reducedMotion())reveal();else finalTimers.push(setTimeout(reveal,300+index*1000));
+    if(still)reveal();else finalTimers.push(setTimeout(reveal,3300+index*1600));
   }
 }
 function winnerBurst(card){const burst=element('span','winner-burst');burst.setAttribute('aria-hidden','true');for(let index=0;index<16;index++){const piece=element('i');piece.style.setProperty('--burst-angle',`${index*22.5}deg`);piece.style.setProperty('--burst-delay',`${index%4*25}ms`);burst.append(piece)}card.append(burst);finalTimers.push(setTimeout(()=>burst.remove(),1600))}

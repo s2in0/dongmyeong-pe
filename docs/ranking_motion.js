@@ -30,7 +30,7 @@ export function showAnimatedCount(node,count,{animate=true,duration=450}={}) {
 }
 
 // Keep each student node across updates, then animate its old-to-new position.
-export function createRankingMotion(container,{build,patch}) {
+export function createRankingMotion(container,{build,patch,getKey=row=>String(row.number)}) {
   let scope=null,nodes=new Map(),previous=new Map();
   const animations=new Map();
   const cancel=()=>{for(const animation of animations.values())animation.cancel();animations.clear()};
@@ -40,24 +40,25 @@ export function createRankingMotion(container,{build,patch}) {
       const freshScope=scope!==key;scope=key;
       const visible=container.getClientRects().length>0;
       const motion=animate&&!freshScope&&visible&&!reducedMotion();
-      cancel();const positions=new Map();
-      if(motion)for(const [id,node] of nodes)positions.set(id,node.getBoundingClientRect().top);
+      const positions=new Map();
+      if(motion)for(const [id,node] of nodes)positions.set(id,node.getBoundingClientRect());
+      cancel();
       if(freshScope){nodes.clear();previous.clear();container.replaceChildren()}
-      const incoming=new Set(rows.map(row=>String(row.number)));
+      const incoming=new Set(rows.map(getKey));
       for(const [id,node] of nodes)if(!incoming.has(id)){node.remove();nodes.delete(id)}
       for(const row of rows){
-        const id=String(row.number),old=previous.get(id);let node=nodes.get(id);
+        const id=getKey(row),old=previous.get(id);let node=nodes.get(id);
         if(!node){node=build(row);node.dataset.student=id;nodes.set(id,node)}
         patch(node,row,old,{animate:motion});container.append(node);
       }
       if(motion)for(const [id,node] of nodes){
         let animation;
-        if(positions.has(id)){const offset=positions.get(id)-node.getBoundingClientRect().top;
-          if(Math.abs(offset)>1)animation=node.animate?.([{transform:`translateY(${offset}px)`},{transform:'translateY(0)'}],{duration:680,easing:'cubic-bezier(.22,1,.36,1)'});
+        if(positions.has(id)){const before=positions.get(id),after=node.getBoundingClientRect(),offset=before.top-after.top,offsetX=(before.left||0)-(after.left||0);
+          if(Math.abs(offset)>1||Math.abs(offsetX)>1)animation=node.animate?.([{transform:offsetX?`translate(${offsetX}px, ${offset}px)`:`translateY(${offset}px)`},{transform:'translate(0, 0)'}],{duration:680,easing:'cubic-bezier(.22,1,.36,1)'});
         }else animation=node.animate?.([{opacity:0,transform:'translateY(18px)'},{opacity:1,transform:'translateY(0)'}],{duration:420,easing:'ease-out'});
         if(animation)animations.set(id,animation);
       }
-      previous=new Map(rows.map(row=>[String(row.number),{...row}]));
+      previous=new Map(rows.map(row=>[getKey(row),{...row}]));
     }
   };
 }

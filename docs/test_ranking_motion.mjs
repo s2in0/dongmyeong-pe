@@ -39,5 +39,15 @@ assert.notEqual(list.children[0],first,'A different class cannot inherit the old
 assert.equal(list.children[0].animations.length,0);
 assert.deepEqual(podiumGroups([{number:3,count:80},{number:2,count:100},{number:1,count:100},{number:4,count:70}]),[{rank:1,count:100,numbers:[1,2]},{rank:3,count:80,numbers:[3]}],'Tied winners share the podium without inventing a second place.');
 assert.deepEqual(podiumGroups([]),[]);
+// Podium cards retain the winning students while moving between horizontal slots.
+const podium=new Node();
+const podiumMotion=createRankingMotion(podium,{getKey:group=>group.numbers.join('-'),build(){const card=new Node();card.getBoundingClientRect=()=>({top:0,left:(card.row.rank===2?0:card.row.rank===1?1:2)*200});return card},patch(card,group){card.row=group}});
+podiumMotion.render([{numbers:[1],rank:1},{numbers:[2],rank:2}],{key:'class-1'});
+const champion=podium.children[0];
+podiumMotion.render([{numbers:[2],rank:1},{numbers:[1],rank:2}],{key:'class-1'});
+assert.equal(podium.children[1],champion);
+assert.equal(champion.animations[0].frames[0].transform,'translate(200px, 0px)');
+podiumMotion.render([{numbers:[1,2],rank:1}],{key:'class-1'});
+assert.equal(podium.children.length,1,'A newly tied group replaces the individual podium cards.');
 motion.reset();assert.equal(list.children.length,0);
 console.log('Ranking motion: keyed moves, new entries, reduced motion, scope resets, zero scores and tied podiums passed.');
