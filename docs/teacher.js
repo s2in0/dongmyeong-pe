@@ -1,4 +1,4 @@
-import {recordDay,recordTime,filterRecords,summarizeRecords,recordsCsv} from './teacher_records.js?v=21';
+import {recordDay,recordTime,filterRecords,summarizeRecords,recordsCsv} from './teacher_records.js?v=22';
 import {createRankingMotion,showAnimatedCount,podiumGroups,reducedMotion} from './ranking_motion.js?v=19';
 const $=id=>document.getElementById(id);
 const DEFAULT_URL='https://script.google.com/macros/s/AKfycbzeU4BDW7u8fluc1OT5i-C1wYiMAHuzBT2myOpQbi89GcR6i8rHx5mLBVoWlT0IcRt6zQ/exec';
@@ -36,8 +36,8 @@ const livePodiumMotion=createRankingMotion($('rankPodium'),{
   patch(card,group,old,{animate}){const {place,student,score}=card.rankParts;card.className=`podium-card place-${group.rank}`;card.dataset.rank=group.rank;place.textContent=`${group.numbers.length>1?'공동 ':''}${group.rank}위`;student.textContent=group.numbers.map(number=>`${number}번`).join(' · ');showAnimatedCount(score,group.count,{animate})}
 });
 function renderLivePodium(rows,scope){livePodiumMotion.render(podiumGroups(rows),{key:scope})}
-function renderRanking(rows,settings){
-  const scope=`${$('tGrade').value}-${$('tClass').value}-${settings.durationSeconds}-${settings.recordMode}`;
+function renderRanking(rows,settings,lessonId=''){
+  const scope=`${$('tGrade').value}-${$('tClass').value}-${settings.durationSeconds}-${settings.recordMode}-${lessonId}`;
   latestRanking=rows.map(row=>({...row}));rankingSettings={...settings};rankingScope=scope;
   $('rankRule').textContent=`${settings.durationSeconds}초 · ${settings.recordMode==='latest'?'마지막 기록':'최고기록'} 반영`;
   if(!rankFinalMode)$('rankLiveStatus').textContent='실시간 · 5초마다 갱신';
@@ -68,10 +68,10 @@ $('showFinalRanking').onclick=async()=>{if(!latestRanking.length)return;$('showF
 $('replayFinalRanking').onclick=playFinalRanking;$('backToLiveRanking').onclick=()=>{leaveFinalRanking();loadClass(false,true).catch(()=>{})};
 function filteredRecords(){return filterRecords(classRecords,{day:$('recordDate').value,duration:$('recordDuration').value,number:$('recordNumber').value})}
 function changeText(change){return change===null?'—':`${change>0?'+':''}${change}회`}
-function renderRecordHistory(rows,body){for(const row of rows){const tr=element('tr');for(const value of [recordTime(row.createdAt),`${row.number}번`,`${row.count}회`,`${row.durationSeconds}초`])tr.append(element('td','',value));body.append(tr)}}
+function renderRecordHistory(rows,body){for(const row of rows){const tr=element('tr');for(const value of [recordTime(row.createdAt),`${row.number}번`,`${row.count}회`,`${row.durationSeconds}초`,row.settingsSnapshot?`준비 ${row.settingsSnapshot.countdownSeconds}초 · ${row.settingsSnapshot.sensitivity} · ${row.settingsSnapshot.recordMode==='latest'?'마지막':'최고'} 기록`:'당시 설정 미저장',row.movesSnapshot?row.movesSnapshot.map(m=>`${m.symbol} ${m.label}`).join(' / ')||'등록 동작 없음':'당시 동작 미저장'])tr.append(element('td','',value));body.append(tr)}}
 function renderRecords(){
   const body=$('classRecords'),records=filteredRecords(),head=element('tr');body.replaceChildren();
-  const labels=recordView==='students'?['번호','제한시간','최고기록','최근기록','이전 대비','도전','최근 측정일','이력']:['측정일','번호','횟수','제한시간'];
+  const labels=recordView==='students'?['번호','제한시간','최고기록','최근기록','이전 대비','도전','최근 측정일','이력']:['측정일','번호','횟수','제한시간','당시 수업 설정','당시 기본동작'];
   for(const label of labels){const th=element('th','',label);th.scope='col';head.append(th)}$('recordTableHead').replaceChildren(head);
   $('recordCaption').textContent=`${loadedClass?.grade||1}학년 ${loadedClass?.classNo||$('tClass').value}반 · ${recordView==='students'?'학생별 요약':'전체 도전 이력'}`;
   $('recordBackendStatus').classList.toggle('hidden',recordsAvailable);
@@ -111,7 +111,7 @@ function setRecordView(view){recordView=view;for(const [id,mode] of [['recordStu
 $('recordStudentsView').onclick=()=>setRecordView('students');$('recordHistoryView').onclick=()=>setRecordView('history');
 $('downloadRecords').onclick=()=>{if(!loadedClass||!recordsAvailable)return;const blob=new Blob([recordsCsv(filteredRecords(),loadedClass,recordView)],{type:'text/csv;charset=utf-8'}),href=URL.createObjectURL(blob),link=document.createElement('a');link.href=href;link.download=`JUMPY_${loadedClass.grade}학년_${loadedClass.classNo}반_${$('recordDate').value||'전체'}_${recordView==='students'?'학생요약':'도전이력'}.csv`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(href),1000)};
 function renderMusic(rows){const wall=$('musicSubmissions');wall.replaceChildren();if(!rows.length){wall.append(element('p','board-empty','아직 제출한 조가 없어요.'));return}
-  rows.forEach((row,index)=>{const card=element('article','music-note'),header=element('div','music-note-head'),icon=element('span','music-note-icon','♫'),name=element('h3','',row.groupName),theme=element('p','music-note-theme',row.theme),bars=element('div','music-note-bars'),foot=element('div','music-note-foot');header.append(icon,name);const moves=Array.isArray(row.moves?.[0])?row.moves:[row.moves||[]];moves.forEach((bar,barIndex)=>{const line=element('div','music-note-line'),title=element('span','music-line-title',`${barIndex+1}줄`),beats=element('div','music-note-beats');for(const [beatIndex,move] of bar.entries()){const symbol=typeof move==='string'?moveSymbols[move]||move:move?.symbol||'',label=typeof move==='string'?move:move?.label||'';const chip=element('span','music-beat'),mark=element('b','',symbol),caption=element('small','music-beat-name',label);chip.title=`${beatIndex+1}박 · ${label}`;chip.setAttribute('aria-label',`${beatIndex+1}박 ${label}`);chip.append(mark,caption);beats.append(chip)}line.append(title,beats);bars.append(line)});foot.textContent=`${row.number}번 제출 · ${moves.length}줄`;card.append(header,theme,bars,foot);wall.append(card)})
+  rows.forEach((row,index)=>{const card=element('article','music-note'),header=element('div','music-note-head'),icon=element('span','music-note-icon','♫'),name=element('h3','',row.groupName),theme=element('p','music-note-theme',row.theme),bars=element('div','music-note-bars'),foot=element('div','music-note-foot');header.append(icon,name);const moves=Array.isArray(row.moves?.[0])?row.moves:[row.moves||[]];moves.forEach((bar,barIndex)=>{const line=element('div','music-note-line'),title=element('span','music-line-title',`${barIndex+1}줄`),beats=element('div','music-note-beats');for(const [beatIndex,move] of bar.entries()){const symbol=typeof move==='string'?moveSymbols[move]||move:move?.symbol||'',label=typeof move==='string'?move:move?.label||'';const chip=element('span','music-beat'),mark=element('b','',symbol),caption=element('small','music-beat-name',label);chip.title=`${beatIndex+1}박 · ${label}`;chip.setAttribute('aria-label',`${beatIndex+1}박 ${label}`);chip.append(mark,caption);beats.append(chip)}line.append(title,beats);bars.append(line)});foot.textContent=`${recordTime(row.createdAt)} · ${row.number}번 제출 · ${moves.length}줄 · ${row.settingsSnapshot?row.settingsSnapshot.durationSeconds+'초 수업':'당시 설정 미저장'}`;card.append(header,theme,bars,foot);wall.append(card)})
 }
 function updateClassPicker(){for(const button of document.querySelectorAll('[data-class]')){const active=button.dataset.class===$('tClass').value;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));button.disabled=classWritePending}}
 function setClassLoading(value,quiet=false){classLoading=value;$('teacherMain').inert=value&&!quiet;$('teacherMain').classList.toggle('class-loading',value&&!quiet);$('teacherMain').setAttribute('aria-busy',String(value&&!quiet))}
@@ -124,7 +124,7 @@ async function loadClass(resetSettings=false,quiet=false,force=false){
     const classChanged=!loadedClass||loadedClass.grade!==id.grade||loadedClass.classNo!==id.classNo;
     if(classChanged)leaveFinalRanking();
     $('classTitle').textContent=`${id.grade}학년 ${id.classNo}반`;$('participantCount').textContent=`${data.participants.length}명`;$('classBest').textContent=data.ranking.length?`${data.ranking[0].count}회`:'—';$('musicCount').textContent=`${data.music.length}조`;
-    renderRanking(data.ranking,data.settings);renderMusic(data.music);setRecords(data.records,id,data.settings,classChanged);
+    renderRanking(data.ranking,data.settings,data.lessonId);renderMusic(data.music);setRecords(data.records,id,data.settings,classChanged);
     if(classChanged||resetSettings||!settingsDirty)fillSettings(data.settings);
     if(classChanged||resetSettings||!movesDirty){moveOptionsDraft=(Array.isArray(data.moveOptions)?data.moveOptions:defaultMoves).map(move=>({...move}));movesDirty=false;renderMoveEditor()}
     if(!medalsDirty){medalsDraft=(Array.isArray(data.medals)&&data.medals.length?data.medals:defaultMedals).map(medal=>({...medal}));renderMedalEditor()}
@@ -148,3 +148,5 @@ $('copyStudentLink').onclick=async()=>{const link=new URL('./',location.href);li
 $('refreshClass').onclick=()=>loadClass().catch(()=>{});
 $('saveSettings').onclick=async()=>{if(classWritePending||classLoading)return;try{const settings=readSettings();classWritePending=true;updateClassPicker();$('saveSettings').disabled=true;$('saveStatus').textContent='저장하는 중…';await api({type:'saveSettings',pin,...chosen(),settings});settingsDirty=false;$('saveStatus').textContent='설정 저장 완료'}catch(e){$('saveStatus').textContent=`저장 실패: ${e.message}`}finally{classWritePending=false;updateClassPicker();$('saveSettings').disabled=false}if(pin)loadClass().catch(()=>{})};
 $('teacherLogout').onclick=()=>{pin='';loadSequence++;setClassLoading(false);clearInterval(timer);exitPresentation();leaveFinalRanking();classRecords=[];loadedClass=null;recordsAvailable=false;recordDetails.clear();renderRecords();renderRanking([],{durationSeconds:30,recordMode:'best'});renderMusic([]);$('teacherContent').classList.add('hidden');$('teacherLogin').classList.remove('hidden');$('loginStatus').textContent=''};
+
+$('startLesson').onclick=async()=>{if(classWritePending||classLoading)return;try{classWritePending=true;updateClassPicker();$('startLesson').disabled=true;await api({type:'saveSettings',pin,...chosen(),settings:readSettings(),startLesson:true});settingsDirty=false;$('saveStatus').textContent='새 수업을 시작했습니다. 지난 수업 기록은 보존됩니다.'}catch(e){$('saveStatus').textContent=e.message}finally{classWritePending=false;updateClassPicker();$('startLesson').disabled=false}if(pin)loadClass().catch(()=>{})};

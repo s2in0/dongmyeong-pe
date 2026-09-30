@@ -54,7 +54,7 @@
             <label><span>반영 기록</span><select id="recordMode"><option value="best">최고기록</option><option value="latest">마지막 기록</option></select></label>
             <div class="teacher-checks"><label class="check"><input id="retryAllowed" type="checkbox"> 재도전 허용</label><label class="check"><input id="rankingVisible" type="checkbox"> 순위 공개</label><label class="check"><input id="activityOpen" type="checkbox"> 활동 열기</label></div>
           </div>
-          <button id="saveSettings" class="primary">설정 저장</button><p id="saveStatus" class="status-line" role="status"></p>
+          <p class="subtle">수업마다 ‘새 수업 시작’을 눌러 주세요. 시간·기본동작과 기록이 수업별로 보존됩니다. 도중 설정을 바꾸면 변경 이력도 남아요.</p><button id="startLesson" class="secondary" type="button">새 수업 시작</button> <button id="saveSettings" class="primary">설정 저장</button><p id="saveStatus" class="status-line" role="status"></p>
         </section>
         <section id="movesCard" class="teacher-pane hidden">
           <div class="pane-heading"><div><span class="eyebrow">MOVE SETUP</span><h2>동작 설정</h2><p class="subtle">이 반 학생들의 동작 선택 목록이에요. 학생은 자기 동작도 추가할 수 있어요.</p></div></div>
@@ -91,6 +91,6 @@
     </div>
   </section>
 </main>
-<script type="module" src="teacher.js?v=21"></script>
+<script type="module" src="teacher.js?v=22"></script>
 </body>
 </html>

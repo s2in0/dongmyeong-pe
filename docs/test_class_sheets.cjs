@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),crypto=require('node:crypto');
 const properties={};
-const context=vm.createContext({PropertiesService:{getScriptProperties:()=>({getProperties:()=>({...properties}),setProperty:(key,value)=>{properties[key]=value}})},Utilities:{DigestAlgorithm:{SHA_256:'sha256'},computeDigest:(_,text)=>crypto.createHash('sha256').update(text).digest(),base64Encode:bytes=>Buffer.from(bytes).toString('base64')}});
+const context=vm.createContext({PropertiesService:{getScriptProperties:()=>({getProperties:()=>({...properties}),setProperty:(key,value)=>{properties[key]=value}})},Utilities:{getUuid:()=>crypto.randomUUID(),formatDate:date=>new Date(date).toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'}),DigestAlgorithm:{SHA_256:'sha256'},computeDigest:(_,text)=>crypto.createHash('sha256').update(text).digest(),base64Encode:bytes=>Buffer.from(bytes).toString('base64')}});
 vm.runInContext(fs.readFileSync(__dirname+'/apps_script.gs','utf8'),context);
 class Range {
  constructor(sheet,row,col,rows=1,cols=1){Object.assign(this,{sheet,row,col,rows,cols})}
@@ -27,23 +27,31 @@ const raw=new Sheet('기록',[Array.from(context.HEAD),['a','2026-09-30T00:00:00
 const settings=new Sheet('설정',[['key','json'],['1-1',JSON.stringify({...context.DEFAULTS,durationSeconds:60})],['1-2',JSON.stringify({...context.DEFAULTS,durationSeconds:45})],['__moves__1-2',JSON.stringify([{symbol:'☆',label:'반2 동작'}])]]);
 const music=new Sheet('음악줄넘기',[['createdAt','grade','classNo','number','groupName','theme','moves'],['2026-09-30T00:00:00Z',1,1,2,'같은 조명','반1 주제',JSON.stringify(['모아뛰기','모아뛰기','모아뛰기','모아뛰기'])],['2026-09-30T00:00:00Z',1,2,3,'같은 조명','반2 주제',JSON.stringify(['엇걸기','엇걸기','엇걸기','엇걸기'])]]);
 const sheets=new Map([['기록',raw],['설정',settings],['음악줄넘기',music]]),ss={getId:()=> 'test-sheet',getSheetByName:name=>sheets.get(name),insertSheet(name){const sh=new Sheet(name);sheets.set(name,sh);return sh}};
+const initial=context.ensureLesson_(ss,1,1,'수업 시작');context.ensureLesson_(ss,1,2,'수업 시작');context.ensureLesson_(ss,1,3,'수업 시작');
+assert.equal(context.ensureLesson_(ss,1,1,'입장').id,initial.id);
+settings.data[1][1]=JSON.stringify({...context.DEFAULTS,durationSeconds:90});
+const changed=context.ensureLesson_(ss,1,1,'설정 변경');assert.notEqual(changed.id,initial.id);assert.equal(initial.settings.durationSeconds,60);
+assert.equal(JSON.parse(sheets.get('수업이력').data[1][5]).durationSeconds,60);
+const forced=context.ensureLesson_(ss,1,1,'새 수업',true);assert.notEqual(forced.id,changed.id);
+settings.data[1][1]=JSON.stringify({...context.DEFAULTS,durationSeconds:60});context.ensureLesson_(ss,1,1,'설정 변경');
 context.updateClassSheets_(ss);
 const first=sheets.get('1학년 1반'),second=sheets.get('1학년 2반'),third=sheets.get('1학년 3반');
 assert.deepEqual(first.data[5].slice(1,6),[2,50,60,2,'높음']);
-assert.equal(first.data[6][3],30,'All time limits are preserved together.');
+assert.equal(first.data[5][7],'당시 동작 미저장');assert.equal(first.data[6][3],30,'All time limits are preserved together.');
 assert.equal(second.data[5][2],0,'Zero is a saved attempt.');
 assert(first.data[1][0].includes('60초'));assert(second.data[1][0].includes('45초'));
 assert(first.data.flat().includes('반1 주제'));assert(!first.data.flat().includes('반2 주제'));
-assert(second.data.flat().includes('반2 동작'));assert(!first.data.flat().includes('반2 동작'));
+assert(second.data.flat().some(v=>String(v).includes('반2 동작')));assert(!first.data.flat().some(v=>String(v).includes('반2 동작')));
 assert.equal(third.data[5][0],'아직 기록이 없습니다.');
 const priorWrites=first.writes,priorRaw=JSON.stringify(raw.data);
 context.updateClassSheets_(ss);assert.equal(first.writes,priorWrites,'Unchanged polling does not rewrite the class sheet.');
 raw.appendRow(['d','2026-09-30T00:03:00Z',1,1,5,99,90,5,'보통',0,99]);
 context.updateClassSheets_(ss);assert.equal(first.data[5][1],5);assert.equal(first.data[5][3],90);
 music.appendRow(['2026-09-30T00:04:00Z',1,1,2,'같은 조명','=새 주제',JSON.stringify(['모아뛰기','모아뛰기','모아뛰기','모아뛰기'])]);
-context.updateClassSheets_(ss);assert(first.data.flat().includes("'=새 주제"));assert(!first.data.flat().includes('반1 주제'));
+context.updateClassSheets_(ss);assert(first.data.flat().includes("'=새 주제"));assert(first.data.flat().includes('반1 주제'),'Prior submissions remain in history.');
 assert.equal(JSON.stringify(raw.data.slice(0,-1)),priorRaw,'Source records remain unchanged.');
 const occupied=new Sheet('1학년 2반',[['교사가 적은 자료']]);
 assert.throws(()=>context.updateClassSheets_({getSheetByName:name=>name==='1학년 2반'?occupied:null}),/기존 자료/);
 context.updateClassSheets_=()=>{throw Error('view failed')};assert.equal(context.updateClassSheetsSafe_({}, {ok:true}).ok,true);
+assert.equal(sheets.size,7,'Only one history source, no per-day tabs.');
 console.log('Class sheets passed: all-duration chronology, zero scores, class-specific settings/moves/music, automatic updates, idempotent polling, safe text and source preservation.');
