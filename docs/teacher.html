@@ -38,27 +38,27 @@
           <div class="projector-stats"><div><span>기록 참여</span><strong id="participantCount">0명</strong></div><div><span>최고 기록</span><strong id="classBest">—</strong></div><div><span>음악 제출</span><strong id="musicCount">0조</strong></div></div>
         </section>
         <nav class="teacher-tabs" aria-label="교사 메뉴">
-          <button type="button" class="active" data-teacher-tab="settingsCard" aria-selected="true">⚙ 수업 설정</button>
-          <button type="button" data-teacher-tab="movesCard" aria-selected="false">○ 동작 설정</button>
+          <button type="button" class="active" data-teacher-tab="settingsCard" aria-selected="true">⚙ 줄넘기 설정</button>
+          <button type="button" data-teacher-tab="movesCard" aria-selected="false">○ 음악 동작</button>
           <button type="button" data-teacher-tab="medalsCard" aria-selected="false">✦ 메달 설정</button>
           <button type="button" data-teacher-tab="rankingCard" aria-selected="false">🏆 우리 반 순위</button>
           <button type="button" data-teacher-tab="recordsCard" aria-selected="false">▤ 반별 기록</button>
           <button type="button" data-teacher-tab="musicCard" aria-selected="false">♫ 음악 줄넘기</button>
         </nav>
         <section id="settingsCard" class="teacher-pane">
-          <div class="pane-heading"><div><span class="eyebrow">CLASS SETUP</span><h2>수업 설정</h2></div></div>
+          <div class="pane-heading"><div><span class="eyebrow">CLASS SETUP</span><h2>줄넘기 기록 설정</h2></div></div>
           <div class="teacher-settings">
             <label><span>제한시간(초)</span><input id="duration" type="number" min="5" max="600"></label>
             <label><span>준비 카운트다운(초)</span><input id="countdownSetting" type="number" min="0" max="15"></label>
             <label><span>민감도</span><select id="sensitivity"><option>낮음</option><option>보통</option><option>높음</option></select></label>
             <label><span>재도전 횟수</span><input id="retryLimit" type="number" min="0" max="20"></label>
             <label><span>반영 기록</span><select id="recordMode"><option value="best">최고기록</option><option value="latest">마지막 기록</option></select></label>
-            <div class="teacher-checks"><label class="check"><input id="retryAllowed" type="checkbox"> 재도전 허용</label><label class="check"><input id="rankingVisible" type="checkbox"> 순위 공개</label><label class="check"><input id="activityOpen" type="checkbox"> 활동 열기</label></div>
+            <div class="teacher-checks"><label class="check"><input id="retryAllowed" type="checkbox"> 재도전 허용</label><label class="check"><input id="rankingVisible" type="checkbox"> 순위 공개</label><label class="check"><input id="activityOpen" type="checkbox"> 줄넘기 기록 열기</label></div>
           </div>
-          <p class="subtle">수업마다 ‘새 수업 시작’을 눌러 주세요. 시간·기본동작과 기록이 수업별로 보존됩니다. 도중 설정을 바꾸면 변경 이력도 남아요.</p><button id="startLesson" class="secondary" type="button">새 수업 시작</button> <button id="saveSettings" class="primary">설정 저장</button><p id="saveStatus" class="status-line" role="status"></p>
+          <p class="subtle">수업마다 ‘새 수업 시작’을 눌러 주세요. 줄넘기 시간·설정과 기록이 수업별로 보존됩니다. 도중 설정을 바꾸면 변경 이력도 남아요.</p><button id="startLesson" class="secondary" type="button">새 수업 시작</button> <button id="saveSettings" class="primary">설정 저장</button><p id="saveStatus" class="status-line" role="status"></p>
         </section>
         <section id="movesCard" class="teacher-pane hidden">
-          <div class="pane-heading"><div><span class="eyebrow">MOVE SETUP</span><h2>동작 설정</h2><p class="subtle">이 반 학생들의 동작 선택 목록이에요. 학생은 자기 동작도 추가할 수 있어요.</p></div></div>
+          <div class="pane-heading"><div><span class="eyebrow">MOVE SETUP</span><h2>음악 줄넘기 동작 설정</h2><p class="subtle">이 반 학생들의 동작 선택 목록이에요. 학생은 자기 동작도 추가할 수 있어요.</p></div></div>
           <div id="moveEditor" class="move-editor"></div>
           <div class="move-editor-actions"><button id="addTeacherMove" class="secondary" type="button">＋ 기본 동작 추가</button><button id="saveTeacherMoves" class="primary" type="button">동작 목록 저장</button></div>
           <p id="moveEditorStatus" class="status-line" role="status"></p>
@@ -86,7 +86,7 @@
         </section>
         <section id="musicCard" class="teacher-pane hidden">
           <div class="pane-heading"><div><span class="eyebrow">MUSIC JUMP</span><h2>음악 줄넘기 제출</h2><p class="subtle">우리 반의 조별 안무</p></div><button id="musicFullscreen" class="secondary presentation-button">⛶ 전체화면</button></div>
-          <div id="musicSubmissions" class="music-wall"></div>
+          <div class="teacher-checks"><label class="check"><input id="musicActivityOpen" type="checkbox" checked> 음악 줄넘기 활동 열기</label></div><p class="subtle">줄넘기 기록의 시간·재도전 설정과 별도로 적용돼요.</p><button id="startMusicLesson" class="secondary" type="button">새 음악 수업 시작</button> <button id="saveMusicSettings" class="primary" type="button">음악 활동 설정 저장</button><p id="musicSettingsStatus" class="status-line" role="status"></p><div id="musicSubmissions" class="music-wall"></div>
         </section>
       </div>
     </div>

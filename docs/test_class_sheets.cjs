@@ -37,7 +37,7 @@ settings.data[1][1]=JSON.stringify({...context.DEFAULTS,durationSeconds:60});con
 context.updateClassSheets_(ss);
 const first=sheets.get('1학년 1반'),second=sheets.get('1학년 2반'),third=sheets.get('1학년 3반');
 assert.deepEqual(first.data[5].slice(1,6),[2,50,60,2,'높음']);
-assert.equal(first.data[5][7],'당시 동작 미저장');assert.equal(first.data[6][3],30,'All time limits are preserved together.');
+assert.equal(first.data[5][7],'','Rope history does not display music moves.');assert.equal(first.data[6][3],30,'All time limits are preserved together.');
 assert.equal(second.data[5][2],0,'Zero is a saved attempt.');
 assert(first.data[1][0].includes('60초'));assert(second.data[1][0].includes('45초'));
 assert(first.data.flat().includes('반1 주제'));assert(!first.data.flat().includes('반2 주제'));
