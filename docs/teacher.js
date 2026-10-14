@@ -19,7 +19,7 @@ const moveSymbols={'모아뛰기':'○','번갈아뛰기':'↔','엇걸기':'✕
 const defaultMoves=[{symbol:'○',label:'모아뛰기'},{symbol:'↔',label:'번갈아뛰기'},{symbol:'✕',label:'엇걸기'},{symbol:'◇',label:'옆뛰기'}];
 let moveOptionsDraft=defaultMoves.map(m=>({...m}));
 function number(id,min,max){const n=Number($(id).value);if(!Number.isInteger(n)||n<min||n>max)throw Error(`${id} 값을 확인해 주세요.`);return n}
-async function api(body){const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),18000);try{const response=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),signal:controller.signal,redirect:'follow'});const data=await response.json();if(!data.ok)throw Error(data.error||'요청 실패');return data}finally{clearTimeout(timeout)}}
+async function api(body,externalSignal){const controller=new AbortController(),abort=()=>controller.abort(),timeout=setTimeout(abort,body.type==='refreshClassSheets'?60000:body.type==='saveSettings'?12000:18000);if(externalSignal?.aborted)abort();else externalSignal?.addEventListener('abort',abort,{once:true});try{const response=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),signal:controller.signal,redirect:'follow'});const data=await response.json();if(!data.ok)throw Error(data.error||'요청 실패');return data}finally{clearTimeout(timeout);externalSignal?.removeEventListener('abort',abort)}}
 const chosen=()=>({grade:number('tGrade',1,6),classNo:number('tClass',1,30)});
 function fillSettings(s){$('duration').value=s.durationSeconds;$('countdownSetting').value=s.countdownSeconds;$('sensitivity').value=s.sensitivity;$('retryLimit').value=s.retryLimit;$('retryAllowed').checked=s.retryAllowed;$('recordMode').value=s.recordMode;$('rankingVisible').checked=s.rankingVisible;$('activityOpen').checked=s.activityOpen;settingsDirty=false}
 function readSettings(){return {durationSeconds:number('duration',5,600),countdownSeconds:number('countdownSetting',0,15),sensitivity:$('sensitivity').value,retryLimit:number('retryLimit',0,20),retryAllowed:$('retryAllowed').checked,recordMode:$('recordMode').value,rankingVisible:$('rankingVisible').checked,activityOpen:$('activityOpen').checked}}
@@ -121,10 +121,10 @@ function updateClassPicker(){for(const button of document.querySelectorAll('[dat
 function setClassLoading(value,quiet=false){classLoading=value;$('teacherMain').inert=value&&!quiet;$('teacherMain').classList.toggle('class-loading',value&&!quiet);$('teacherMain').setAttribute('aria-busy',String(value&&!quiet))}
 async function loadClass(resetSettings=false,quiet=false,force=false){
   if(classWritePending||(!resetSettings&&classLoading&&!force))return null;
-  const sequence=++loadSequence,id=chosen();setClassLoading(true,quiet);updateClassPicker();
+  activeClassRead?.abort();const readController=new AbortController();activeClassRead=readController;const sequence=++loadSequence,id=chosen();setClassLoading(true,quiet);updateClassPicker();
   if(!quiet)$('teacherStatus').textContent=`${id.grade}학년 ${id.classNo}반 불러오는 중…`;
   try{
-    const data=await api({type:'teacherData',pin,...id});if(sequence!==loadSequence||!pin)return null;
+    const data=await api({type:'teacherData',pin,...id},readController.signal);if(sequence!==loadSequence||!pin)return null;
     const classChanged=!loadedClass||loadedClass.grade!==id.grade||loadedClass.classNo!==id.classNo;
     if(classChanged)leaveFinalRanking();
     $('classTitle').textContent=`${id.grade}학년 ${id.classNo}반`;$('participantCount').textContent=`${data.participants.length}명`;$('classBest').textContent=data.ranking.length?`${data.ranking[0].count}회`:'—';$('musicCount').textContent=`${data.music.length}조`;
@@ -135,24 +135,41 @@ async function loadClass(resetSettings=false,quiet=false,force=false){
     if(classChanged){$('saveStatus').textContent='';$('moveEditorStatus').textContent=''}
     localStorage.setItem('jumpy_teacher_class',id.classNo);$('teacherStatus').textContent=data.sheetViewWarning||`${new Date().toLocaleTimeString('ko-KR')} 업데이트`;return data;
   }catch(error){if(sequence!==loadSequence)return null;if(loadedClass){$('tGrade').value=loadedClass.grade;$('tClass').value=loadedClass.classNo;updateClassPicker()}$('teacherStatus').textContent=`조회 실패: ${error.message}`;throw error}
-  finally{if(sequence===loadSequence)setClassLoading(false)}
+  finally{if(activeClassRead===readController)activeClassRead=null;if(sequence===loadSequence)setClassLoading(false)}
 }
 for(const button of document.querySelectorAll('[data-class]'))button.onclick=()=>{if(classWritePending)return;exitPresentation();leaveFinalRanking();$('tClass').value=button.dataset.class;loadClass(true).catch(()=>{})};
 updateClassPicker();
 function showTab(id){exitPresentation();if(id!=='rankingCard')leaveFinalRanking();for(const pane of document.querySelectorAll('.teacher-pane'))pane.classList.toggle('hidden',pane.id!==id);for(const button of document.querySelectorAll('[data-teacher-tab]')){const active=button.dataset.teacherTab===id;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active))}if(id==='rankingCard')loadClass(false,true).catch(()=>{})}
-function pollClass(){if(!pin||document.hidden||rankFinalMode)return;pollTicks++;if(!$('rankingCard').classList.contains('hidden')||pollTicks%6===0)loadClass(false,true).catch(()=>{})}
+function pollClass(){if(!pin||document.hidden||rankFinalMode)return;refreshClassViews();pollTicks++;if(!$('rankingCard').classList.contains('hidden')||pollTicks%6===0)loadClass(false,true).catch(()=>{})}
 for(const button of document.querySelectorAll('[data-teacher-tab]'))button.onclick=()=>showTab(button.dataset.teacherTab);
 function exitPresentation(){if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});if(presenting){presenting.classList.remove('presenting');presenting.querySelector('.presentation-button').textContent='⛶ 전체화면';presenting=null}document.body.classList.remove('presenting-board')}
 async function togglePresentation(id){const panel=$(id);if(presenting===panel){exitPresentation();return}exitPresentation();presenting=panel;panel.classList.add('presenting');document.body.classList.add('presenting-board');panel.querySelector('.presentation-button').textContent='✕ 전체화면 닫기';try{if(panel.requestFullscreen)await panel.requestFullscreen()}catch{/* CSS presentation remains available when the browser denies fullscreen. */}}
 $('rankFullscreen').onclick=()=>togglePresentation('rankingCard');$('musicFullscreen').onclick=()=>togglePresentation('musicCard');
 document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&presenting)exitPresentation()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&presenting)exitPresentation()});
 for(const field of $('settingsCard').querySelectorAll('input,select')){field.addEventListener('input',()=>{settingsDirty=true});field.addEventListener('change',()=>{settingsDirty=true})}
-$('teacherEnter').onclick=async()=>{pin=$('teacherPin').value.trim();url=$('teacherUrl').value.trim();if(!pin||!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url)){$('loginStatus').textContent='PIN과 /exec 주소를 확인해 주세요.';return}try{$('teacherEnter').disabled=true;$('loginStatus').textContent='로그인하는 중…';const data=await loadClass(true);if(!data)return;localStorage.setItem('jumpy_teacher_url',url);$('teacherPin').value='';$('teacherLogin').classList.add('hidden');$('teacherContent').classList.remove('hidden');showTab('settingsCard');clearInterval(timer);pollTicks=0;timer=setInterval(pollClass,5000)}catch(e){$('loginStatus').textContent=e.message.includes('알 수 없는 요청')?'Apps Script 주소에 구버전이 연결되어 있어요. 배포 주소를 확인해 주세요.':e.message;pin=''}finally{$('teacherEnter').disabled=false}};
+$('teacherEnter').onclick=async()=>{pin=$('teacherPin').value.trim();url=$('teacherUrl').value.trim();if(!pin||!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url)){$('loginStatus').textContent='PIN과 /exec 주소를 확인해 주세요.';return}try{$('teacherEnter').disabled=true;$('loginStatus').textContent='로그인하는 중…';const data=await loadClass(true);if(!data)return;localStorage.setItem('jumpy_teacher_url',url);$('teacherPin').value='';$('teacherLogin').classList.add('hidden');$('teacherContent').classList.remove('hidden');showTab('settingsCard');clearInterval(timer);pollTicks=0;timer=setInterval(pollClass,5000);refreshClassViews(true)}catch(e){$('loginStatus').textContent=e.message.includes('알 수 없는 요청')?'Apps Script 주소에 구버전이 연결되어 있어요. 배포 주소를 확인해 주세요.':e.message;pin=''}finally{$('teacherEnter').disabled=false}};
 $('copyStudentLink').onclick=async()=>{const link=studentLink(location.href,url,chosen());try{await navigator.clipboard.writeText(link);$('teacherStatus').textContent='학생용 링크를 복사했습니다.'}catch{$('teacherStatus').textContent='학생용 링크: '+link}};
 $('refreshClass').onclick=()=>loadClass().catch(()=>{});
-$('saveSettings').onclick=async()=>{if(classWritePending||classLoading)return;try{const settings=readSettings();classWritePending=true;updateClassPicker();$('saveSettings').disabled=true;$('saveStatus').textContent='저장하는 중…';await api({type:'saveSettings',pin,...chosen(),settings});settingsDirty=false;$('saveStatus').textContent='설정 저장 완료'}catch(e){$('saveStatus').textContent=`저장 실패: ${e.message}`}finally{classWritePending=false;updateClassPicker();$('saveSettings').disabled=false}if(pin)loadClass().catch(()=>{})};
-$('teacherLogout').onclick=()=>{pin='';loadSequence++;setClassLoading(false);clearInterval(timer);exitPresentation();leaveFinalRanking();classRecords=[];loadedClass=null;recordsAvailable=false;recordDetails.clear();renderRecords();renderRanking([],{durationSeconds:30,recordMode:'best'});renderMusic([]);$('teacherContent').classList.add('hidden');$('teacherLogin').classList.remove('hidden');$('loginStatus').textContent=''};
+$('saveSettings').onclick=()=>saveTeacherSettings(false).catch(e=>{$('saveStatus').textContent=e.message});
+$('teacherLogout').onclick=()=>{pin='';activeClassRead?.abort();lastViewRefresh=0;loadSequence++;setClassLoading(false);clearInterval(timer);exitPresentation();leaveFinalRanking();classRecords=[];loadedClass=null;recordsAvailable=false;recordDetails.clear();renderRecords();renderRanking([],{durationSeconds:30,recordMode:'best'});renderMusic([]);$('teacherContent').classList.add('hidden');$('teacherLogin').classList.remove('hidden');$('loginStatus').textContent=''};
 
-$('startLesson').onclick=async()=>{if(classWritePending||classLoading)return;try{classWritePending=true;updateClassPicker();$('startLesson').disabled=true;await api({type:'saveSettings',pin,...chosen(),settings:readSettings(),startLesson:true});settingsDirty=false;$('saveStatus').textContent='새 수업을 시작했습니다. 지난 수업 기록은 보존됩니다.'}catch(e){$('saveStatus').textContent=e.message}finally{classWritePending=false;updateClassPicker();$('startLesson').disabled=false}if(pin)loadClass().catch(()=>{})};
+$('startLesson').onclick=()=>saveTeacherSettings(true).catch(e=>{$('saveStatus').textContent=e.message});
+
+let activeClassRead=null,pendingSettingsRequest=null,viewRefreshPending=false,lastViewRefresh=0,viewRefreshAgain=false;
+async function refreshClassViews(force=false){if(force&&viewRefreshPending){viewRefreshAgain=true;return}if(!pin||viewRefreshPending||classWritePending||!force&&Date.now()-lastViewRefresh<60000)return;viewRefreshPending=true;try{const data=await api({type:'refreshClassSheets',pin});if(data.busy){lastViewRefresh=0;return}lastViewRefresh=Date.now();$('classSheetStatus').textContent=data.sheetViewWarning||'';}catch(e){$('classSheetStatus').textContent='반별 시트 정리가 지연되고 있어요. 설정 저장과 기록 원본은 별도로 처리됩니다.';}finally{viewRefreshPending=false;if(viewRefreshAgain&&pin){viewRefreshAgain=false;refreshClassViews(true)}}}
+function setSettingsSaving(value){for(const field of $('settingsCard').querySelectorAll('input,select,button'))field.disabled=value;$('saveSettings').textContent=value?'저장 중…':'설정 저장';$('settingsCard').setAttribute('aria-busy',String(value));}
+async function saveTeacherSettings(startLesson=false){
+ if(classWritePending)return;if($('teacherMain').inert){$('saveStatus').textContent='반 설정을 불러오는 중이에요. 표시가 끝나면 저장해 주세요.';return}
+ const id=chosen(),settings=readSettings(),signature=JSON.stringify({id,settings,startLesson});
+ if(!pendingSettingsRequest||pendingSettingsRequest.signature!==signature)pendingSettingsRequest={id:crypto.randomUUID(),signature};
+ const requestId=pendingSettingsRequest.id;activeClassRead?.abort();loadSequence++;setClassLoading(false);classWritePending=true;updateClassPicker();setSettingsSaving(true);$('saveStatus').textContent='설정을 저장하고 확인하는 중…';
+ try{
+  let data;try{data=await api({type:'saveSettings',pin,...id,settings,startLesson,requestId})}catch(error){const readback=await api({type:'teacherSettings',pin,...id});if(readback.requestId!==requestId)throw error;data=readback;}
+  if(data.requestId!==requestId||Object.keys(settings).some(key=>data.settings?.[key]!==settings[key]))throw Error('저장된 설정이 입력값과 다릅니다. 다시 저장해 주세요.');
+  fillSettings(data.settings);pendingSettingsRequest=null;$('saveStatus').textContent=`${startLesson?'새 수업 설정 저장 확인':'저장 확인'} · ${data.settings.durationSeconds}초 · ${data.settings.retryAllowed?'재도전 '+data.settings.retryLimit+'회':'재도전 안 함'}`;
+ }catch(e){settingsDirty=true;$('saveStatus').textContent=`저장 확인 실패: ${e.message} · 입력한 설정은 그대로 남아 있어요.`;}
+ finally{classWritePending=false;setSettingsSaving(false);updateClassPicker();}
+ if(pin){loadClass(false,true).catch(()=>{});refreshClassViews(true);}
+}
 
 initStudentQr(chosen,()=>url);

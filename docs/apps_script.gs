@@ -35,7 +35,7 @@ function doPost(e) {
         var moveRow=moveRows.findIndex(function(x,i){return i>0&&x[0]===moveKey;});
         if(moveRow<0) moveSheet.appendRow([moveKey,JSON.stringify(options)]); else moveSheet.getRange(moveRow+1,2).setValue(JSON.stringify(options));
         ensureLesson_(ss,Number(d.grade),Number(d.classNo),'동작 변경');
-        var moveResult=updateClassSheetsSafe_(ss,{ok:true,moveOptions:options});
+        var moveResult={ok:true,moveOptions:options};
       } finally { moveLock.releaseLock(); }
       return out_(moveResult);
     }
@@ -48,18 +48,9 @@ function doPost(e) {
       } finally { lockMedals.releaseLock(); }
       return out_({ok:true,medals:medals});
     }
-    if (d.type === 'saveSettings') {
-      if (!authorized_(d.pin)) return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});
-      var key = classKey_(d.grade,d.classNo), next = validSettings_(d.settings);
-      var lock = LockService.getScriptLock(); lock.waitLock(20000);
-      try { var s = sheet_(ss, SETTINGS, ['key','json']); var data=s.getDataRange().getValues();
-        var row=data.findIndex(function(x,i){return i>0 && x[0]===key;});
-        if(row<0) s.appendRow([key,JSON.stringify(next)]); else s.getRange(row+1,2).setValue(JSON.stringify(next));
-        ensureLesson_(ss,Number(d.grade),Number(d.classNo),d.startLesson?'새 수업 시작':'설정 변경',d.startLesson===true);
-        var settingsResult=updateClassSheetsSafe_(ss,{ok:true,settings:next});
-      } finally { lock.releaseLock(); }
-      return out_(settingsResult);
-    }
+    if(d.type==='saveSettings'){if(!authorized_(d.pin))return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});return out_(saveClassSettings_(ss,d));}
+    if(d.type==='teacherSettings'||d.type==='refreshClassSheets'){if(!authorized_(d.pin))return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});return out_(d.type==='teacherSettings'?readClassSettings_(ss,d):refreshClassSheets_(ss));}
+    if(d.type==='studentSettings')return out_(readClassSettings_(ss,d));
     if (d.type === 'record') return out_(record_(ss,d));
     return out_({ok:false,error:'알 수 없는 요청'});
   } catch(err) { return out_({ok:false,error:String(err.message || err)}); }
@@ -106,7 +97,7 @@ function medals_(ss) { var sh=sheet_(ss,SETTINGS,['key','json']),rows=sh.getData
   for(var i=1;i<rows.length;i++) if(rows[i][0]==='__medals__'){try{return validMedals_(JSON.parse(rows[i][1]));}catch(e){break;}}
   return DEFAULT_MEDALS;
 }
-function settings_(ss,key) { var sh=sheet_(ss,SETTINGS,['key','json']); var rows=sh.getDataRange().getValues();
+function settings_(ss,key) { var parts=String(key).split('-'),saved=classSettingsState_(parts[0],parts[1]);if(saved)return saved.settings;var sh=sheet_(ss,SETTINGS,['key','json']); var rows=sh.getDataRange().getValues();
   for(var i=1;i<rows.length;i++) if(rows[i][0]===key) { try{return validSettings_(JSON.parse(rows[i][1]));}catch(e){break;} }
   return DEFAULTS;
 }
@@ -137,14 +128,14 @@ function record_(ss,d) { var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),
   try {
     var s=settings_(ss,key), sh=sheet_(ss,RECORDS,HEAD), rows=sh.getDataRange().getValues();
     var old=rows.findIndex(function(r,i){return i>0 && String(r[0])===id;});
-    if(old>=0) { if(Number(rows[old][2])!==g || Number(rows[old][3])!==c || Number(rows[old][4])!==n) throw Error('중복 기록 ID'); return updateClassSheetsSafe_(ss,{ok:true,duplicate:true}); }
+    if(old>=0) { if(Number(rows[old][2])!==g || Number(rows[old][3])!==c || Number(rows[old][4])!==n) throw Error('중복 기록 ID'); return {ok:true,duplicate:true}; }
     if(!s.activityOpen) throw Error('이 반의 활동이 닫혔습니다.');
     var duration=integer_(d.durationSeconds,5,600); if(duration!==s.durationSeconds) throw Error('제한시간 설정이 바뀌었습니다. 다시 입장해 주세요.');
-    var lesson=ensureLesson_(ss,g,c,'수업 기록');if(d.lessonId&&d.lessonId!==lesson.id)throw Error('수업 설정이 변경되었습니다. 다시 입장해 주세요.');var count=integer_(d.count,0,5000), attempts=rows.filter(function(r,i){return i>0 && Number(r[2])===g && Number(r[3])===c && Number(r[4])===n && Number(r[6])===duration && String(r[11])===lesson.id;}).length;
+    var lesson=ensureLesson_(ss,g,c,'수업 기록');s=lesson.settings;if(duration!==s.durationSeconds)throw Error('제한시간 설정이 바뀌었습니다. 다시 입장해 주세요.');if(d.lessonId&&d.lessonId!==lesson.id)throw Error('수업 설정이 변경되었습니다. 다시 입장해 주세요.');var count=integer_(d.count,0,5000), attempts=rows.filter(function(r,i){return i>0 && Number(r[2])===g && Number(r[3])===c && Number(r[4])===n && Number(r[6])===duration && String(r[11])===lesson.id;}).length;
     if(attempts >= 1+(s.retryAllowed?s.retryLimit:0)) throw Error('재도전 횟수를 모두 사용했습니다.');
     var created=new Date().toISOString();
     sh.appendRow([id,created,g,c,n,count,duration,integer_(d.countdownSeconds,0,15),String(s.sensitivity),integer_(d.misses||0,0,5000),integer_(d.bestStreak||0,0,5000),lesson.id,JSON.stringify(lesson.settings),JSON.stringify(lesson.moves)]);
-    return updateClassSheetsSafe_(ss,{ok:true,createdAt:created});
+    return {ok:true,createdAt:created};
   } finally {lock.releaseLock();}
 }
 function safeText_(value,max) {
@@ -166,7 +157,7 @@ function musicSubmit_(ss,d) {
   var lock=LockService.getScriptLock();lock.waitLock(20000);
   try{if(!settings_(ss,classKey_(g,c)).activityOpen)throw Error('이 반의 활동이 닫혔습니다.');var sh=sheet_(ss,MUSIC,MUSIC_HEAD);
     var lesson=ensureLesson_(ss,g,c,'음악 제출');sh.appendRow([new Date().toISOString(),g,c,n,group,theme,JSON.stringify(bars),lesson.id,JSON.stringify(lesson.settings),JSON.stringify(lesson.moves),bpm,beats,sequence?JSON.stringify(sequence):'',choreography?JSON.stringify(choreography):'']);
-    return updateClassSheetsSafe_(ss,{ok:true});
+    return {ok:true};
   }finally{lock.releaseLock();}
 }
 function teacherData_(ss,d) {
@@ -181,9 +172,6 @@ function teacherData_(ss,d) {
     latest[key]={groupName:String(rows[i][4]),theme:String(rows[i][5]),number:Number(rows[i][3]),moves:moves,createdAt:String(rows[i][0]),settingsSnapshot:jsonSnapshot_(rows[i][8]),movesSnapshot:jsonSnapshot_(rows[i][9]),bpm:rows[i][10]?Number(rows[i][10]):null,beatsPerBar:Number(rows[i][11])||(moves[0]||[]).length||4,sequence:jsonSnapshot_(rows[i][12]),choreography:jsonSnapshot_(rows[i][13])};
   }
   var result={ok:true,lessonId:lessonId,settings:s,medals:medals_(ss),moveOptions:moves_(ss,classKey_(g,c)),participants:ranking.map(function(r){return r.number;}),ranking:ranking,records:all.map(function(r){return {createdAt:r.createdAt,number:r.number,count:r.count,durationSeconds:r.durationSeconds,countdownSeconds:r.countdownSeconds,sensitivity:r.sensitivity,lessonId:r.lessonId,settingsSnapshot:r.settingsSnapshot,movesSnapshot:r.movesSnapshot};}),music:Object.keys(latest).map(function(k){return latest[k];}).sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);})};
-  var viewLock=LockService.getScriptLock();
-  if(viewLock.tryLock(1000)){try{updateClassSheetsSafe_(ss,result);}finally{viewLock.releaseLock();}}
-  else result.sheetViewWarning='반별 시트 갱신을 기다리고 있습니다. 다음 조회 때 다시 갱신합니다.';
   return result;
 }
 /** Apps Script 편집기에서 한 번 실행하면 기존 기록도 세 반 요약 탭에 반영됩니다. */
@@ -191,8 +179,9 @@ function setupJumpyClassSheets() {
   var ss=SpreadsheetApp.getActiveSpreadsheet(),lock=LockService.getScriptLock();
   if(!ss)throw Error('앱에 연결된 스프레드시트의 Apps Script에서 실행해 주세요.');
   lock.waitLock(20000);
-  try{[1,2,3].forEach(function(c){ensureLesson_(ss,1,c,'현재 설정 등록');});updateClassSheets_(ss);return {ok:true,sheets:['1학년 1반','1학년 2반','1학년 3반']};}
+  try{[1,2,3].forEach(function(c){ensureLesson_(ss,1,c,'현재 설정 등록');});}
   finally{lock.releaseLock();}
+  return refreshClassSheets_(ss);
 }
 // 호출자가 보유한 저장/조회 잠금 안에서 실행합니다. 요약 실패로 원본 저장을 실패 처리하지 않습니다.
 function updateClassSheetsSafe_(ss,result) {
@@ -277,13 +266,14 @@ function settingsLabel_(s){return s?s.durationSeconds+'초 · 준비 '+s.countdo
 function movesLabel_(moves){return moves?moves.map(function(m){return m.symbol+' '+m.label;}).join(' / ')||'등록 동작 없음':'당시 동작 미저장';}
 // 날짜별 탭 대신 하나의 원본에 반별 수업 스냅샷을 누적합니다. 같은 날 같은 설정은 재사용합니다.
 function ensureLesson_(ss,g,c,reason,force){
- var sh=sheet_(ss,LESSONS,LESSON_HEAD),rows=sh.getDataRange().getValues(),key=classKey_(g,c),s=settings_(ss,key),moves=moves_(ss,key),now=new Date(),previous=null;
+ var props=PropertiesService.getScriptProperties(),state=classSettingsState_(g,c),appliedKey='JUMPY_SETTINGS_APPLIED_'+g+'_'+c,sh=sheet_(ss,LESSONS,LESSON_HEAD),rows=sh.getDataRange().getValues(),key=classKey_(g,c),s=state?state.settings:settings_(ss,key),moves=moves_(ss,key),now=new Date(),previous=null;
+ if(state&&state.forceLesson&&props.getProperty(appliedKey)!==state.revision)force=true;
  for(var i=rows.length-1;i>0;i--)if(Number(rows[i][2])===g&&Number(rows[i][3])===c){previous=rows[i];break;}
- if(!force&&previous&&Utilities.formatDate(new Date(previous[1]),'Asia/Seoul','yyyy-MM-dd')===Utilities.formatDate(now,'Asia/Seoul','yyyy-MM-dd')&&previous[5]===JSON.stringify(s)&&previous[6]===JSON.stringify(moves))return {id:String(previous[0]),settings:s,moves:moves};
- var id=Utilities.getUuid();sh.appendRow([id,now.toISOString(),g,c,reason,JSON.stringify(s),JSON.stringify(moves)]);return {id:id,settings:s,moves:moves};
+ var reuse=!force&&previous&&Utilities.formatDate(new Date(previous[1]),'Asia/Seoul','yyyy-MM-dd')===Utilities.formatDate(now,'Asia/Seoul','yyyy-MM-dd')&&previous[5]===JSON.stringify(s)&&previous[6]===JSON.stringify(moves),id=reuse?String(previous[0]):Utilities.getUuid();
+ if(!reuse)sh.appendRow([id,now.toISOString(),g,c,force?'새 수업 시작':reason,JSON.stringify(s),JSON.stringify(moves)]);
+ if(state)props.setProperty(appliedKey,state.revision);return {id:id,settings:s,moves:moves};
 }
-
-function currentLessonId_(ss,g,c){var rows=sheet_(ss,LESSONS,LESSON_HEAD).getDataRange().getValues();for(var i=rows.length-1;i>0;i--)if(Number(rows[i][2])===g&&Number(rows[i][3])===c){return Utilities.formatDate(new Date(rows[i][1]),'Asia/Seoul','yyyy-MM-dd')===Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd')?String(rows[i][0]):'';}return '';}
+function currentLessonId_(ss,g,c){var state=classSettingsState_(g,c);if(state&&state.forceLesson&&PropertiesService.getScriptProperties().getProperty('JUMPY_SETTINGS_APPLIED_'+g+'_'+c)!==state.revision)return '';var rows=sheet_(ss,LESSONS,LESSON_HEAD).getDataRange().getValues();for(var i=rows.length-1;i>0;i--)if(Number(rows[i][2])===g&&Number(rows[i][3])===c){if(state&&rows[i][5]!==JSON.stringify(state.settings))return '';return Utilities.formatDate(new Date(rows[i][1]),'Asia/Seoul','yyyy-MM-dd')===Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd')?String(rows[i][0]):'';}return '';}
 
 function validSequence_(items){
  if(!Array.isArray(items)||items.length<1||items.length>256)throw Error('동작 구간은 1~256개로 구성해 주세요.');
@@ -300,3 +290,22 @@ function choreographyLabel_(value){
  var legend=value.palette.map(function(m){return m.symbol+' '+m.label;}).join(' / '),lines=value.bars.map(function(row,i){return (i+1)+'줄: '+row.map(function(n){return value.palette[n].symbol;}).join(' ');}).join('\n');
  var text=legend+'\n'+lines;return text.length>47000?text.slice(0,47000)+'\n… 전체 안무는 음악줄넘기 원본과 선생님 화면에서 확인':text;
 }
+
+// Settings use one atomic property write, independent of student-record and report locks.
+function classSettingsKey_(g,c){return 'JUMPY_SETTINGS_'+integer_(g,1,6)+'_'+integer_(c,1,30);}
+function classSettingsState_(g,c){var raw=PropertiesService.getScriptProperties().getProperty(classSettingsKey_(g,c));if(!raw)return null;var state=JSON.parse(raw);state.settings=validSettings_(state.settings);return state;}
+function saveClassSettings_(ss,d){
+ var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),next=validSettings_(d.settings),props=PropertiesService.getScriptProperties(),key=classSettingsKey_(g,c),previous=classSettingsState_(g,c),requestId=String(d.requestId||'');
+ if(requestId&&!/^[a-zA-Z0-9-]{12,80}$/.test(requestId))throw Error('설정 저장 요청을 확인해 주세요.');
+ if(previous&&requestId&&previous.requestId===requestId){if(JSON.stringify(previous.settings)!==JSON.stringify(next)||previous.forceLesson!==(d.startLesson===true))throw Error('다른 설정에 같은 요청 ID를 사용할 수 없습니다.');}
+ else props.setProperty(key,JSON.stringify({settings:next,revision:Utilities.getUuid(),requestId:requestId,updatedAt:new Date().toISOString(),forceLesson:d.startLesson===true}));
+ var saved=classSettingsState_(g,c);return {ok:true,saved:true,grade:g,classNo:c,settings:saved.settings,requestId:saved.requestId,settingsVersion:saved.revision};
+}
+function readClassSettings_(ss,d){var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),state=classSettingsState_(g,c);return {ok:true,grade:g,classNo:c,settings:state?state.settings:settings_(ss,classKey_(g,c)),requestId:state?state.requestId:'',settingsVersion:state?state.revision:'',lessonId:currentLessonId_(ss,g,c)};}
+// The existing settings sheet remains a readable mirror. Report work never holds up settings saves.
+function mirrorClassSettings_(ss){
+ var lock=LockService.getScriptLock();if(!lock.tryLock(0))return false;
+ try{var props=PropertiesService.getScriptProperties(),values=props.getProperties(),sheet=sheet_(ss,SETTINGS,['key','json']),rows=sheet.getDataRange().getValues();Object.keys(values).forEach(function(key){var match=key.match(/^JUMPY_SETTINGS_(\d+)_(\d+)$/);if(!match)return;var state=JSON.parse(values[key]),marker='JUMPY_SETTINGS_MIRRORED_'+match[1]+'_'+match[2];if(values[marker]===state.revision)return;var classKey=classKey_(match[1],match[2]),json=JSON.stringify(validSettings_(state.settings)),index=rows.findIndex(function(row,i){return i>0&&row[0]===classKey;});if(index<0){sheet.appendRow([classKey,json]);rows.push([classKey,json]);}else sheet.getRange(index+1,2).setValue(json);ensureLesson_(ss,Number(match[1]),Number(match[2]),'설정 변경');props.setProperty(marker,state.revision);});return true;
+ }finally{lock.releaseLock();}
+}
+function refreshClassSheets_(ss){var lock=LockService.getUserLock();if(!lock.tryLock(0))return {ok:true,busy:true};try{var mirrored=mirrorClassSettings_(ss);return updateClassSheetsSafe_(ss,{ok:true,settingsMirrored:mirrored});}finally{lock.releaseLock();}}

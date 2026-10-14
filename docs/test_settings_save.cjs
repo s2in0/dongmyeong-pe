@@ -1,0 +1,24 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),crypto=require('node:crypto');
+const props={},locks={scriptBusy:true,userBusy:false,scriptRequests:0,viewRequests:0};
+const context=vm.createContext({PropertiesService:{getScriptProperties:()=>({getProperty:key=>props[key]||null,getProperties:()=>({...props}),setProperty:(key,value)=>{props[key]=value}})},LockService:{getScriptLock:()=>({tryLock:()=>{locks.scriptRequests++;return !locks.scriptBusy},waitLock(){locks.scriptRequests++;if(locks.scriptBusy)throw Error('Record lock is busy');},releaseLock(){}}),getUserLock:()=>({tryLock:()=>{locks.viewRequests++;return !locks.userBusy},releaseLock(){}})},Utilities:{getUuid:()=>crypto.randomUUID(),formatDate:date=>new Date(date).toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'})}});
+vm.runInContext(fs.readFileSync(__dirname+'/apps_script.gs','utf8'),context);
+class Sheet{constructor(name,rows=[]){this.name=name;this.rows=rows}getLastRow(){return this.rows.length}getDataRange(){return {getValues:()=>this.rows.map(r=>r.slice())}}getRange(r,c,rows=1,cols=1){return {getValues:()=>Array.from({length:rows},(_,i)=>Array.from({length:cols},(_,j)=>this.rows[r+i-1]?.[c+j-1]??'')),setValue:v=>{this.rows[r-1]??=[];this.rows[r-1][c-1]=v},setValues:values=>values.forEach((line,i)=>line.forEach((v,j)=>{this.rows[r+i-1]??=[];this.rows[r+i-1][c+j-1]=v}))}}appendRow(row){this.rows.push(Array.from(row))}setFrozenRows(){}}
+const initial={...context.DEFAULTS},map=new Map([['설정',new Sheet('설정',[['key','json'],['1-1',JSON.stringify(initial)],['1-2',JSON.stringify(initial)]])]]),ss={getSheetByName:name=>map.get(name),insertSheet:name=>{const s=new Sheet(name);map.set(name,s);return s}};
+const next={...initial,durationSeconds:60,retryAllowed:false};
+const result=context.saveClassSettings_({getSheetByName(){throw Error('Saving settings must not call the spreadsheet')}},{grade:1,classNo:1,settings:next,requestId:'request-settings-001'});
+assert(result.ok&&result.saved);assert.equal(result.settings.durationSeconds,60);assert.equal(result.settings.retryAllowed,false);assert.equal(locks.scriptRequests,0,'Settings save never waits for student-record/report locks.');
+assert.equal(context.settings_(ss,'1-1').durationSeconds,60);assert.equal(context.settings_(ss,'1-2').durationSeconds,30,'Other class is unchanged.');
+const retry=context.saveClassSettings_(ss,{grade:1,classNo:1,settings:next,requestId:'request-settings-001'});assert.equal(retry.settingsVersion,result.settingsVersion,'Retry keeps the same setting revision.');
+assert.throws(()=>context.saveClassSettings_(ss,{grade:1,classNo:1,settings:{...next,durationSeconds:90},requestId:'request-settings-001'}));
+assert.throws(()=>context.saveClassSettings_(ss,{grade:1,classNo:1,settings:{...next,durationSeconds:0}}));
+assert.equal(context.mirrorClassSettings_(ss),false);assert.equal(JSON.parse(map.get('설정').rows[1][1]).durationSeconds,30,'Mirror waits separately while record lock is busy.');
+locks.scriptBusy=false;assert(context.mirrorClassSettings_(ss));assert.equal(JSON.parse(map.get('설정').rows[1][1]).durationSeconds,60);
+const lesson=context.ensureLesson_(ss,1,1,'입장');assert.equal(lesson.settings.durationSeconds,60);assert.equal(context.readClassSettings_(ss,{grade:1,classNo:1}).lessonId,lesson.id);
+const forced=context.saveClassSettings_(ss,{grade:1,classNo:1,settings:next,startLesson:true,requestId:'request-settings-002'});assert.equal(context.currentLessonId_(ss,1,1),'');
+const newLesson=context.ensureLesson_(ss,1,1,'입장');assert.notEqual(newLesson.id,lesson.id);assert.equal(context.ensureLesson_(ss,1,1,'입장').id,newLesson.id,'Forced lesson starts once even across repeated student bootstraps.');
+assert.equal(context.saveClassSettings_(ss,{grade:1,classNo:1,settings:next,startLesson:true,requestId:'request-settings-002'}).settingsVersion,forced.settingsVersion);
+assert.equal(context.ensureLesson_(ss,1,1,'입장').id,newLesson.id);assert.equal(JSON.parse(map.get('수업이력').rows[1][5]).durationSeconds,60,'Immutable lesson snapshot stays intact.');
+context.updateClassSheets_=()=>{assert.equal(locks.scriptBusy,false);};locks.userBusy=true;assert(context.refreshClassSheets_(ss).busy);locks.userBusy=false;assert(context.refreshClassSheets_(ss).ok);
+context.SpreadsheetApp={getActiveSpreadsheet:()=>ss};context.out_=value=>value;context.authorized_=()=>false;
+const before=JSON.stringify(props);assert.equal(context.doPost({postData:{contents:JSON.stringify({type:'saveSettings',grade:1,classNo:1,settings:next})}}).ok,false);assert.equal(JSON.stringify(props),before,'Teacher authentication is still required.');
+console.log('Settings passed: immediate 60-second/no-retry save with record lock busy, persisted readback, idempotent retry, class isolation, deferred sheet mirror, immutable snapshots and teacher authentication.');

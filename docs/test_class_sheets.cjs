@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),crypto=require('node:crypto');
 const properties={};
-const context=vm.createContext({PropertiesService:{getScriptProperties:()=>({getProperties:()=>({...properties}),setProperty:(key,value)=>{properties[key]=value}})},Utilities:{getUuid:()=>crypto.randomUUID(),formatDate:date=>new Date(date).toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'}),DigestAlgorithm:{SHA_256:'sha256'},computeDigest:(_,text)=>crypto.createHash('sha256').update(text).digest(),base64Encode:bytes=>Buffer.from(bytes).toString('base64')}});
+const context=vm.createContext({PropertiesService:{getScriptProperties:()=>({getProperty:key=>properties[key]||null,getProperties:()=>({...properties}),setProperty:(key,value)=>{properties[key]=value}})},Utilities:{getUuid:()=>crypto.randomUUID(),formatDate:date=>new Date(date).toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'}),DigestAlgorithm:{SHA_256:'sha256'},computeDigest:(_,text)=>crypto.createHash('sha256').update(text).digest(),base64Encode:bytes=>Buffer.from(bytes).toString('base64')}});
 vm.runInContext(fs.readFileSync(__dirname+'/apps_script.gs','utf8'),context);
 class Range {
  constructor(sheet,row,col,rows=1,cols=1){Object.assign(this,{sheet,row,col,rows,cols})}
