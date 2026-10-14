@@ -1,4 +1,4 @@
-/* jump_counter.js - 줄넘기 점프 판정 로직 (jump_counter.py 를 그대로 옮긴 것).
+/* jump_counter.js - 공용 점프 판정 로직과 웹 수업용 낮은 점프·번갈아뛰기 프로필.
  * 브라우저(<script>)와 Node(require) 양쪽에서 쓸 수 있다. 판정 규칙 설명은 jump_counter.py 참고.
  */
 (function (root, factory) {
@@ -90,6 +90,8 @@
       this.maxWidthChange = d("maxWidthChange", 0.4);
       this.lenient = !!d("lenient", false);
       this.requireFeet = !!d("requireFeet", false);
+      this.feetMode = d("feetMode", "both");
+      this.rhythmSkipTolerance = d("rhythmSkipTolerance", 1.5);
       this.rhythmMin = this.lenient ? 1 : d("rhythmMin", 3);
       this.periodRange = d("periodRange", [0.25, 1.5]);
       this.periodTolerance = d("periodTolerance", 0.5);
@@ -128,6 +130,8 @@
 
     /** t: 초, sig: extractSignal 결과 또는 null. 이번 프레임에 확정된 점프 목록을 돌려준다. */
     update(t, sig) {
+      // A frozen camera can resume with a visible pose; never join it to an old valley.
+      if (this._lastSeenT !== null && t - this._lastSeenT > this.lostTimeout) this._resetTracking();
       this.lastT = t;
       if (!sig) {
         this.tracking = false;
@@ -227,7 +231,10 @@
         const left = b[3] - a[3], right = b[4] - a[4];
         if (this.requireFeet) {
           const hipRise = b[2] - a[2], headRise = b[1] - a[1];
-          return Math.min(left, right) >= this.feetLift * this._scale &&
+          // Alternating/boxer steps lift the support foot while the other foot lowers.
+          // Still require visible feet AND coherent head/hip rise; a knee lift alone is insufficient.
+          const footRise=this.feetMode === "support" ? Math.max(left,right) : Math.min(left,right);
+          return footRise >= this.feetLift * this._scale &&
             hipRise >= this.coherence * bodyRise && headRise >= this.coherence * bodyRise ? null : "feet";
         }
         return Math.max(left, right) >= this.feetLift * this._scale ? null : "feet";
@@ -284,7 +291,7 @@
       if (this.inRhythm) {
         const gap = t - this.events[this.events.length - 1].t;
         const ref = this._refPeriod();
-        if (gap <= this.rhythmBreak && (ref === null || (0.65 * ref <= gap && gap <= 1.5 * ref))) return [this._count(cand)];
+        if (gap <= this.rhythmBreak && (ref === null || (0.65 * ref <= gap && gap <= this.rhythmSkipTolerance * ref))) return [this._count(cand)];
         this.inRhythm = false;
         if (this.debug) this.log.push(`[${t.toFixed(2)}s] 리듬 끊김 (간격 ${gap.toFixed(2)}s)`);
       }
@@ -344,5 +351,20 @@
     }
   }
 
-  return { JumpCounter, extractSignal, REASONS };
+  /** Classroom profile: small bounces and alternating feet, without guessing missed jumps. */
+  function createClassroomCounter(sensitivity) {
+    return new JumpCounter({threshold:({낮음:.020,보통:.012,높음:.008})[sensitivity] ?? .012,
+      smoothing:.7,minInterval:.18,maxRiseTime:.9,feetLift:.008,coherence:.35,maxShift:.2,
+      requireFeet:true,feetMode:'support',rhythmMin:3,periodRange:[.18,1.5],
+      rhythmSkipTolerance:2.5,missCorrection:false});
+  }
+
+  function measurementSignal(p,width,height) {
+    // Do not infer hidden or off-screen feet. A lower tracking threshold avoids discarding
+    // every frame where a visible moving foot briefly drops below the ready-screen score.
+    if(!p||![11,12,23,24,27,28].every(i=>p[i]&&vis(p[i])>=.55&&p[i].x>.02&&p[i].x<.98&&p[i].y>.02&&p[i].y<.98))return null;
+    return extractSignal(p,width,height,{source:'torso',feetVisibility:.55});
+  }
+
+  return { JumpCounter, extractSignal, REASONS,createClassroomCounter,measurementSignal };
 });
