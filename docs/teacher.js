@@ -1,3 +1,5 @@
+import {initStudentQr} from './teacher_qr.js?v=23';
+import {studentLink} from './student_access.js?v=23';
 import {recordDay,recordTime,filterRecords,summarizeRecords,recordsCsv} from './teacher_records.js?v=22';
 import {createRankingMotion,showAnimatedCount,podiumGroups,reducedMotion} from './ranking_motion.js?v=19';
 const $=id=>document.getElementById(id);
@@ -144,9 +146,11 @@ $('rankFullscreen').onclick=()=>togglePresentation('rankingCard');$('musicFullsc
 document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&presenting)exitPresentation()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&presenting)exitPresentation()});
 for(const field of $('settingsCard').querySelectorAll('input,select')){field.addEventListener('input',()=>{settingsDirty=true});field.addEventListener('change',()=>{settingsDirty=true})}
 $('teacherEnter').onclick=async()=>{pin=$('teacherPin').value.trim();url=$('teacherUrl').value.trim();if(!pin||!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url)){$('loginStatus').textContent='PIN과 /exec 주소를 확인해 주세요.';return}try{$('teacherEnter').disabled=true;$('loginStatus').textContent='로그인하는 중…';const data=await loadClass(true);if(!data)return;localStorage.setItem('jumpy_teacher_url',url);$('teacherPin').value='';$('teacherLogin').classList.add('hidden');$('teacherContent').classList.remove('hidden');showTab('settingsCard');clearInterval(timer);pollTicks=0;timer=setInterval(pollClass,5000)}catch(e){$('loginStatus').textContent=e.message.includes('알 수 없는 요청')?'Apps Script 주소에 구버전이 연결되어 있어요. 배포 주소를 확인해 주세요.':e.message;pin=''}finally{$('teacherEnter').disabled=false}};
-$('copyStudentLink').onclick=async()=>{const link=new URL('./',location.href);link.searchParams.set('sheet',url);try{await navigator.clipboard.writeText(link.href);$('teacherStatus').textContent='학생용 링크를 복사했습니다.'}catch{$('teacherStatus').textContent='학생용 링크: '+link.href}};
+$('copyStudentLink').onclick=async()=>{const link=studentLink(location.href,url,chosen());try{await navigator.clipboard.writeText(link);$('teacherStatus').textContent='학생용 링크를 복사했습니다.'}catch{$('teacherStatus').textContent='학생용 링크: '+link}};
 $('refreshClass').onclick=()=>loadClass().catch(()=>{});
 $('saveSettings').onclick=async()=>{if(classWritePending||classLoading)return;try{const settings=readSettings();classWritePending=true;updateClassPicker();$('saveSettings').disabled=true;$('saveStatus').textContent='저장하는 중…';await api({type:'saveSettings',pin,...chosen(),settings});settingsDirty=false;$('saveStatus').textContent='설정 저장 완료'}catch(e){$('saveStatus').textContent=`저장 실패: ${e.message}`}finally{classWritePending=false;updateClassPicker();$('saveSettings').disabled=false}if(pin)loadClass().catch(()=>{})};
 $('teacherLogout').onclick=()=>{pin='';loadSequence++;setClassLoading(false);clearInterval(timer);exitPresentation();leaveFinalRanking();classRecords=[];loadedClass=null;recordsAvailable=false;recordDetails.clear();renderRecords();renderRanking([],{durationSeconds:30,recordMode:'best'});renderMusic([]);$('teacherContent').classList.add('hidden');$('teacherLogin').classList.remove('hidden');$('loginStatus').textContent=''};
 
 $('startLesson').onclick=async()=>{if(classWritePending||classLoading)return;try{classWritePending=true;updateClassPicker();$('startLesson').disabled=true;await api({type:'saveSettings',pin,...chosen(),settings:readSettings(),startLesson:true});settingsDirty=false;$('saveStatus').textContent='새 수업을 시작했습니다. 지난 수업 기록은 보존됩니다.'}catch(e){$('saveStatus').textContent=e.message}finally{classWritePending=false;updateClassPicker();$('startLesson').disabled=false}if(pin)loadClass().catch(()=>{})};
+
+initStudentQr(chosen,()=>url);

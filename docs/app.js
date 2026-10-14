@@ -1,3 +1,4 @@
+import {studentClass} from './student_access.js?v=23';
 // Load camera inference only when measurement starts; music editing works without it.
 import {createRankingMotion,showAnimatedCount} from './ranking_motion.js?v=19';
 const $=id=>document.getElementById(id), KEY='jr_pwa_v1';
@@ -14,6 +15,7 @@ let state=Object.assign({url:DEFAULT_SHEET_URL,identity:null,settings:defaults,m
 state.identity=null;state.ranking=null;
 function store(){localStorage.setItem(KEY,JSON.stringify(state))}
 const qs=new URLSearchParams(location.search);if(qs.get('sheet')&&/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(qs.get('sheet'))){state.url=qs.get('sheet');store()}
+const qrClass=studentClass(location.search);if(qrClass){$('grade').value=qrClass.grade;$('classNo').value=qrClass.classNo;$('number').value='';}
 function show(id){for(const x of ['login','dashboard','measure','result'])$(x).classList.toggle('hidden',x!==id);$('bottomNav').classList.toggle('hidden',id!=='dashboard');$('teacherLink').classList.toggle('hidden',id!=='login');if(id==='dashboard')selectPanel('homePanel');window.scrollTo(0,0)}
 function selectPanel(id){for(const panel of document.querySelectorAll('.student-panel'))panel.classList.toggle('hidden',panel.id!==id);document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.target===id));if(id==='historyPanel'&&state.identity)requestAnimationFrame(()=>drawGrowth(myRecords().filter(r=>r.durationSeconds===state.settings.durationSeconds)));window.scrollTo({top:0,behavior:'smooth'})}
 for(const button of document.querySelectorAll('[data-target]'))button.onclick=()=>selectPanel(button.dataset.target);

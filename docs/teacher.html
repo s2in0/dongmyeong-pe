@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>JUMPY 교사 화면</title>
-  <link rel="stylesheet" href="style.css?v=19">
+  <link rel="stylesheet" href="style.css?v=23">
 </head>
 <body class="teacher-app">
 <main class="teacher-shell">
@@ -27,6 +27,7 @@
           <button type="button" data-class="2" aria-pressed="false">2반</button>
           <button type="button" data-class="3" aria-pressed="false">3반</button>
         </div>
+        <button id="showStudentQr" class="primary" type="button">학생 접속 QR코드</button>
         <button id="copyStudentLink" class="secondary">학생용 링크 복사</button>
         <button id="teacherLogout" class="secondary">로그아웃</button>
         <p id="teacherStatus" class="status-line" role="status"></p>
@@ -91,6 +92,14 @@
     </div>
   </section>
 </main>
-<script type="module" src="teacher.js?v=22"></script>
+<dialog id="studentQrDialog" class="student-qr-dialog" aria-labelledby="studentQrTitle" aria-describedby="studentQrHelp">
+  <div class="qr-heading"><div><span class="eyebrow">JOIN JUMPY</span><h2 id="studentQrTitle">학생 접속</h2></div><button id="closeStudentQr" class="secondary" type="button">닫기</button></div>
+  <p id="studentQrHelp" class="subtle">아이패드 카메라로 QR코드를 비추고, 나타나는 링크를 눌러 주세요.<br>우리 반이 선택되어 있어요. 자기 번호를 입력하면 입장할 수 있어요.</p>
+  <canvas id="studentQrCanvas" role="img" aria-label="학생용 JUMPY 접속 QR코드"></canvas>
+  <div class="qr-actions"><button id="shareStudentQr" class="primary" type="button">QR 공유</button><button id="downloadStudentQr" class="secondary" type="button">이미지 저장</button><button id="expandStudentQr" class="secondary" type="button">크게 보기</button><button id="copyQrLink" class="secondary" type="button">링크 복사</button></div>
+  <p id="studentQrStatus" class="status-line" role="status"></p>
+  <details class="qr-link-details"><summary>접속 링크 보기</summary><a id="studentQrLink" target="_blank" rel="noopener"></a></details>
+</dialog>
+<script type="module" src="teacher.js?v=23"></script>
 </body>
 </html>
