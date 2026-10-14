@@ -363,7 +363,8 @@
     // Do not infer hidden or off-screen feet. A lower tracking threshold avoids discarding
     // every frame where a visible moving foot briefly drops below the ready-screen score.
     if(!p||![11,12,23,24,27,28].every(i=>p[i]&&vis(p[i])>=.55&&p[i].x>.02&&p[i].x<.98&&p[i].y>.02&&p[i].y<.98))return null;
-    return extractSignal(p,width,height,{source:'torso',feetVisibility:.55});
+    const signal=extractSignal(p,width,height,{source:'torso',feetVisibility:.55});
+    return signal&&signal.headY!==null&&signal.hipY!==null&&signal.feetY!==null?signal:null;
   }
 
   return { JumpCounter, extractSignal, REASONS,createClassroomCounter,measurementSignal };

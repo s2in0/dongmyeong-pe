@@ -31,4 +31,6 @@ for(const fps of [15,24,30,60])for(const kind of ['bounce','alternate','confiden
 for(const kind of ['planted','shrug','knee','hidden','walking','jitter'])assert.equal(run(kind).count,0,kind);
 const c=createClassroomCounter('보통');c.update(0,measurementSignal(pose(0,[0,0]),W,H));c.update(.1,measurementSignal(pose(.008,[.008,.008]),W,H));c.update(2,measurementSignal(pose(0,[0,0]),W,H));assert.equal(c.count,0);assert.equal(c._state,'falling');
 assert.equal(measurementSignal(null,W,H),null);
+const croppedHead=pose(.008,[.008,.008]);for(const i of [0,7,8])croppedHead[i].y=-.1;
+assert.equal(measurementSignal(croppedHead,W,H),null,'Hidden head must produce a framing prompt, not endless rhythm waiting.');
 console.log('Classroom counter passed: low and alternating hops at 15/24/30/60 FPS, moving-foot confidence, no planted-foot/shrug/knee/walking/jitter/hidden-feet counts, camera-gap reset.');
