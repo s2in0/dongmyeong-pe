@@ -21,12 +21,15 @@
 
 .music-tempo{margin-bottom:24px}.music-tempo input{max-width:180px}.music-tempo .music-tip{line-height:1.7}.bar-row .beat-grid{row-gap:10px}
 
-/* Compact choreography: eight beats fit across an iPad, four across a phone. */
-.bars-list{gap:12px}.bar-row{padding:12px;border-radius:14px}
-.bar-header{margin-bottom:8px;font-size:14px}
-.bar-row .beat-grid{gap:6px}
-.bar-row .beat{height:64px;min-height:44px;gap:4px;padding:5px;border-radius:12px}
-.bar-row .beat strong{font-size:28px}
-.bar-row .beat-number{font-size:11px}
-@media(min-width:700px){.bar-row .beat-grid{grid-template-columns:repeat(8,minmax(0,1fr))}}
-@media(max-width:480px){.bar-row{padding:10px}.bar-row .beat{height:60px}.bar-row .beat strong{font-size:26px}}
+/* One move per repeated segment, keeping the original beat editor sizes intact. */
+.song-length{font-size:14px;font-weight:750;color:var(--brand-dark);margin:12px 0}
+.sequence-list{display:grid;gap:10px;margin:16px 0}.sequence-row{display:grid;grid-template-columns:minmax(0,1fr) 114px auto;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);border-radius:16px;background:#f8faff}
+.sequence-row.selected{border-color:var(--brand)}.sequence-row.playing{background:#fff1cf;border-color:#f4b946}
+.sequence-move{display:grid;grid-template-columns:32px minmax(0,1fr);text-align:left;align-items:center;gap:4px 8px;background:none;color:var(--ink);min-height:54px;padding:4px;min-width:0}.sequence-move small{grid-column:1/-1;color:var(--muted);font-size:11px}.sequence-move b{font-size:26px;font-weight:650}.sequence-move span{font-size:15px;font-weight:800;overflow-wrap:anywhere}
+.sequence-beats{margin:0;display:flex;align-items:center;gap:6px}.sequence-beats input{width:65px;min-height:44px;padding:8px;text-align:center}.sequence-beats span{font-size:11px;white-space:nowrap;color:var(--muted)}
+.sequence-actions{display:flex;gap:4px}.sequence-action{min-height:44px;min-width:44px;padding:6px;background:white;border:1px solid var(--line);border-radius:10px;font-size:12px;color:#425b7b}.practice-beat{font-weight:800;color:var(--brand-dark);font-variant-numeric:tabular-nums;line-height:1.5}
+@media(max-width:700px){.sequence-row{grid-template-columns:minmax(0,1fr) 114px}.sequence-actions{grid-column:1/-1;justify-content:flex-end}.sequence-row{padding:10px}.sequence-move span{font-size:14px}}
+
+.music-sequence-note .music-note-beats{grid-template-columns:1fr}.music-sequence-note .music-beat{min-height:48px;flex-direction:row;gap:10px;justify-content:flex-start;padding:8px 12px}.music-sequence-note .music-beat-name{font-size:13px;max-height:none}.music-sequence-note .music-note-bars{max-height:420px;overflow:auto}
+
+.sequence-picker{grid-column:1/-1;border-top:1px solid var(--line);padding-top:10px}.sequence-picker>p{font-size:12px;font-weight:700;color:var(--muted);margin:0 0 8px}.sequence-picker .move-palette button{min-height:44px;font-size:12px}.sequence-picker .move-palette .move-label{font-size:12px}.sequence-picker .move-palette .move-symbol{font-size:21px}
