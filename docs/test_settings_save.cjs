@@ -22,3 +22,11 @@ context.updateClassSheets_=()=>{assert.equal(locks.scriptBusy,false);};locks.use
 context.SpreadsheetApp={getActiveSpreadsheet:()=>ss};context.out_=value=>value;context.authorized_=()=>false;
 const before=JSON.stringify(props);assert.equal(context.doPost({postData:{contents:JSON.stringify({type:'saveSettings',grade:1,classNo:1,settings:next})}}).ok,false);assert.equal(JSON.stringify(props),before,'Teacher authentication is still required.');
 console.log('Settings passed: immediate 60-second/no-retry save with record lock busy, persisted readback, idempotent retry, class isolation, deferred sheet mirror, immutable snapshots and teacher authentication.');
+
+const noSheet={getSheetByName(){throw Error('Live settings read must not touch Sheets')}};
+const live=context.readClassSettings_(noSheet,{grade:1,classNo:1});assert.equal(live.settings.durationSeconds,60);assert.equal(live.lessonId,newLesson.id);
+context.SpreadsheetApp={getActiveSpreadsheet(){throw Error('Hot config route must not even acquire the spreadsheet')}};
+assert.equal(context.doPost({postData:{contents:JSON.stringify({type:'studentSettings',grade:1,classNo:1})}}).ok,true);
+const revision=context.saveClassSettings_(noSheet,{grade:1,classNo:1,settings:{...next,durationSeconds:90},requestId:'request-settings-003'});
+const changed=context.readClassSettings_(noSheet,{grade:1,classNo:1});assert.equal(changed.settings.durationSeconds,90);assert.equal(changed.settingsVersion,revision.settingsVersion);assert.equal(changed.lessonId,'','Old lesson must never be paired with new settings.');
+console.log('Live settings passed: properties-only polling, no Sheets acquisition, current revision, safe pending lesson and unchanged class isolation.');

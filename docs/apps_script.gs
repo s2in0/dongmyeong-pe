@@ -21,6 +21,8 @@ function doPost(e) {
   try {
     var d = JSON.parse((e.postData || {}).contents || '{}');
     if (d.type === 'ping') return out_({ok:true});
+    // Hot settings reads use properties only; no spreadsheet or record lock.
+    if(d.type==='studentSettings')return out_(readClassSettings_(null,d));
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (d.type === 'bootstrap') return out_(bootstrap_(ss, d));
     if (d.type === 'teacherData') {
@@ -120,7 +122,8 @@ function views_(records,settings,number,lessonId) {
   }:null};
 }
 function bootstrap_(ss,d) { var g=integer_(d.grade,1,6), c=integer_(d.classNo,1,30), n=integer_(d.number,1,99);
-  var lock=LockService.getScriptLock();lock.waitLock(20000);try{var lesson=ensureLesson_(ss,g,c,'수업 입장'),key=classKey_(g,c),s=lesson.settings;return Object.assign({ok:true,settings:s,lessonId:lesson.id,medals:medals_(ss),moveOptions:lesson.moves},views_(allRecords_(ss,g,c),s,n,lesson.id));}finally{lock.releaseLock();}
+  var lock=LockService.getScriptLock();lock.waitLock(20000);var lesson;try{lesson=ensureLesson_(ss,g,c,'수업 입장');}finally{lock.releaseLock();}
+  var s=lesson.settings;return Object.assign({ok:true,settings:s,settingsVersion:lesson.settingsVersion,lessonId:lesson.id,medals:medals_(ss),moveOptions:lesson.moves},views_(allRecords_(ss,g,c),s,n,lesson.id));
 }
 function record_(ss,d) { var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),n=integer_(d.number,1,99),key=classKey_(g,c);
   var id=String(d.id||''); if(!/^[a-zA-Z0-9-]{12,80}$/.test(id)) throw Error('기록 ID가 올바르지 않습니다.');
@@ -271,7 +274,9 @@ function ensureLesson_(ss,g,c,reason,force){
  for(var i=rows.length-1;i>0;i--)if(Number(rows[i][2])===g&&Number(rows[i][3])===c){previous=rows[i];break;}
  var reuse=!force&&previous&&Utilities.formatDate(new Date(previous[1]),'Asia/Seoul','yyyy-MM-dd')===Utilities.formatDate(now,'Asia/Seoul','yyyy-MM-dd')&&previous[5]===JSON.stringify(s)&&previous[6]===JSON.stringify(moves),id=reuse?String(previous[0]):Utilities.getUuid();
  if(!reuse)sh.appendRow([id,now.toISOString(),g,c,force?'새 수업 시작':reason,JSON.stringify(s),JSON.stringify(moves)]);
- if(state)props.setProperty(appliedKey,state.revision);return {id:id,settings:s,moves:moves};
+ if(state)props.setProperty(appliedKey,state.revision);
+ props.setProperty('JUMPY_LIVE_LESSON_'+g+'_'+c,JSON.stringify({id:id,day:Utilities.formatDate(now,'Asia/Seoul','yyyy-MM-dd'),revision:state?state.revision:'',settings:s}));
+ return {id:id,settings:s,settingsVersion:state?state.revision:'',moves:moves};
 }
 function currentLessonId_(ss,g,c){var state=classSettingsState_(g,c);if(state&&state.forceLesson&&PropertiesService.getScriptProperties().getProperty('JUMPY_SETTINGS_APPLIED_'+g+'_'+c)!==state.revision)return '';var rows=sheet_(ss,LESSONS,LESSON_HEAD).getDataRange().getValues();for(var i=rows.length-1;i>0;i--)if(Number(rows[i][2])===g&&Number(rows[i][3])===c){if(state&&rows[i][5]!==JSON.stringify(state.settings))return '';return Utilities.formatDate(new Date(rows[i][1]),'Asia/Seoul','yyyy-MM-dd')===Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd')?String(rows[i][0]):'';}return '';}
 
@@ -301,7 +306,13 @@ function saveClassSettings_(ss,d){
  else props.setProperty(key,JSON.stringify({settings:next,revision:Utilities.getUuid(),requestId:requestId,updatedAt:new Date().toISOString(),forceLesson:d.startLesson===true}));
  var saved=classSettingsState_(g,c);return {ok:true,saved:true,grade:g,classNo:c,settings:saved.settings,requestId:saved.requestId,settingsVersion:saved.revision};
 }
-function readClassSettings_(ss,d){var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),state=classSettingsState_(g,c);return {ok:true,grade:g,classNo:c,settings:state?state.settings:settings_(ss,classKey_(g,c)),requestId:state?state.requestId:'',settingsVersion:state?state.revision:'',lessonId:currentLessonId_(ss,g,c)};}
+function readClassSettings_(ss,d){
+ var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),props=PropertiesService.getScriptProperties(),state=classSettingsState_(g,c),raw=props.getProperty('JUMPY_LIVE_LESSON_'+g+'_'+c),live=raw?JSON.parse(raw):null;
+ var day=Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd'),matching=live&&live.day===day&&live.revision===(state?state.revision:'');
+ // Legacy classes are initialized once by bootstrap/setup, never cached over a teacher save.
+ if(!state&&!live){ss=ss||SpreadsheetApp.getActiveSpreadsheet();return {ok:true,settings:settings_(ss,classKey_(g,c)),settingsVersion:'',lessonId:'',requestId:''};}
+ return {ok:true,grade:g,classNo:c,settings:state?state.settings:live.settings,requestId:state?state.requestId:'',settingsVersion:state?state.revision:'',lessonId:matching?live.id:''};
+}
 // The existing settings sheet remains a readable mirror. Report work never holds up settings saves.
 function mirrorClassSettings_(ss){
  var lock=LockService.getScriptLock();if(!lock.tryLock(0))return false;
