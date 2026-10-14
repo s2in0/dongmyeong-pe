@@ -1,0 +1,4 @@
+import assert from 'node:assert/strict';
+import {classRoster,validateStudentNumber,ropeParticipation} from './class_roster.js';
+for(const [classNo,total] of [[1,15],[2,15],[3,14]]){const roster=classRoster(1,classNo);assert.equal(roster.total,total);assert.equal(roster.maxNumber,total);assert.equal(validateStudentNumber({grade:1,classNo,number:total}).number,total);assert.throws(()=>validateStudentNumber({grade:1,classNo,number:total+1}));const partial=ropeParticipation([{number:1},{number:1},{number:total},{number:99}],roster);assert.equal(partial.completed,2);assert.equal(partial.missing.length,total-2);assert(!partial.missing.includes(1));assert.equal(ropeParticipation(roster.numbers.map(number=>({number})),roster).missing.length,0);}
+assert.equal(classRoster(2,1),null);console.log('Rosters passed: class-specific bounds, valid last numbers, rejected absent numbers, unique participants, missing numbers and all-complete status.');

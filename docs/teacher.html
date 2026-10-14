@@ -72,6 +72,7 @@
         <section id="rankingCard" class="teacher-pane hidden">
           <div class="pane-heading"><div><span class="eyebrow">CLASS RANKING</span><h2>우리 반 순위</h2><p id="rankRule" class="subtle"></p></div><button id="rankFullscreen" class="secondary presentation-button">⛶ 전체화면</button></div>
           <div class="ranking-actions"><span id="rankLiveStatus" class="ranking-live-label" role="status">실시간 순위</span><button id="showFinalRanking" type="button" class="primary" disabled>최종 순위 발표</button></div>
+          <p id="rankParticipation" class="subtle" role="status"></p>
           <div id="rankLiveBoard"><div id="rankPodium" class="rank-podium"></div><ol id="classRanking" class="rank-list"></ol></div>
           <div id="rankFinalStage" class="final-ranking hidden"><div class="final-ranking-heading"><span class="eyebrow">FINAL RANKING</span><h3 id="finalRankTitle" aria-live="polite">최종 순위</h3><p id="finalRankRule" class="subtle"></p></div><div class="final-podium-stage"><div id="finalRankCountdown" class="final-rank-countdown hidden" aria-hidden="true"></div><div id="finalRankPodium" class="rank-podium final-podium"></div></div><div class="final-ranking-actions"><button id="replayFinalRanking" type="button" class="secondary">다시 발표</button><button id="backToLiveRanking" type="button" class="primary">실시간 순위로</button></div></div>
         </section>
@@ -100,6 +101,6 @@
   <p id="studentQrStatus" class="status-line" role="status"></p>
   <details class="qr-link-details"><summary>접속 링크 보기</summary><a id="studentQrLink" target="_blank" rel="noopener"></a></details>
 </dialog>
-<script type="module" src="teacher.js?v=34"></script>
+<script type="module" src="teacher.js?v=35"></script>
 </body>
 </html>

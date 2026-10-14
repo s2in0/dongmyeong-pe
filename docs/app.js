@@ -1,4 +1,5 @@
-import {createRecordDelivery} from './record_delivery.js?v=34';
+import {classRoster,validateStudentNumber} from './class_roster.js?v=35';
+import {createRecordDelivery} from './record_delivery.js?v=35';
 import {DEFAULT_BPM,validBpm,beatMilliseconds} from './music_rhythm.js?v=26';
 import {estimatedTime} from './music_sequence.js?v=28';
 import {MAX_BARS,emptyBar,countBeats,loadBars,packBars,locateBeat} from './music_bars.js?v=29';
@@ -20,6 +21,8 @@ state.identity=null;state.ranking=null;
 function store(){localStorage.setItem(KEY,JSON.stringify(state))}
 const qs=new URLSearchParams(location.search);if(qs.get('sheet')&&/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(qs.get('sheet'))){state.url=qs.get('sheet');store()}
 const qrClass=studentClass(location.search);if(qrClass){$('grade').value=qrClass.grade;$('classNo').value=qrClass.classNo;$('number').value='';}
+function updateEntryRoster(){const roster=classRoster(Number($('grade').value),Number($('classNo').value));$('number').max=roster?roster.maxNumber:99;$('number').placeholder=roster?`1~${roster.maxNumber}번`:'번호';}
+for(const field of ['grade','classNo'])$(field).addEventListener('input',updateEntryRoster);updateEntryRoster();
 function show(id){for(const x of ['login','dashboard','measure','result'])$(x).classList.toggle('hidden',x!==id);$('bottomNav').classList.toggle('hidden',id!=='dashboard');$('teacherLink').classList.toggle('hidden',id!=='login');if(id==='dashboard')selectPanel('homePanel');window.scrollTo(0,0)}
 function selectPanel(id){if(id!=='musicPanel')stopPractice();for(const panel of document.querySelectorAll('.student-panel'))panel.classList.toggle('hidden',panel.id!==id);document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.target===id));if(id==='historyPanel'&&state.identity)requestAnimationFrame(()=>drawGrowth(myRecords().filter(r=>r.durationSeconds===state.settings.durationSeconds)));window.scrollTo({top:0,behavior:'smooth'})}
 for(const button of document.querySelectorAll('[data-target]'))button.onclick=()=>selectPanel(button.dataset.target);
@@ -92,7 +95,7 @@ function updateResultRanking(){if($('result').classList.contains('hidden'))retur
 function refreshStudentLive(){if(!state.identity||!state.url||!navigator.onLine)return Promise.resolve(false);if(studentLivePending)return studentLivePending;const identity={...state.identity},readSeq=++studentConfigReadSeq;studentLivePending=(async()=>{try{const data=await api({type:'studentLive',...identity});if(!sameId(identity,state.identity))return false;applyStudentSettings(data,readSeq);if(data.lessonId!==state.lessonId)return false;state.ranking=data.ranking;const known=new Map(state.records.map(r=>[r.id,r]));for(const record of data.records||[])known.set(record.id,record);state.records=[...known.values()];store();render();updateResultRanking();if(data.pending){flushNeeded=true;flushCloudRecords();}return true;}catch{return false;}finally{studentLivePending=null;}})();return studentLivePending;}
 function wakeStudentSettings(){if(!document.hidden&&state.identity)refreshStudentSettings()}
 document.addEventListener('visibilitychange',wakeStudentSettings);window.addEventListener('pageshow',wakeStudentSettings);window.addEventListener('focus',wakeStudentSettings);
-$('enter').onclick=async()=>{try{const id={grade:validNum('grade',1,6),classNo:validNum('classNo',1,30),number:validNum('number',1,99)};state.identity=id;state.ranking=null;settingsConfirmed=false;state.lessonId='';store();$('loginError').textContent='';show('dashboard');loadMusicDraft();render();refreshStudentSettings();refresh();await sync()}catch(e){$('loginError').textContent=e.message}};
+$('enter').onclick=async()=>{try{const id=validateStudentNumber({grade:validNum('grade',1,6),classNo:validNum('classNo',1,30),number:validNum('number',1,99)});state.identity=id;state.ranking=null;settingsConfirmed=false;state.lessonId='';store();$('loginError').textContent='';show('dashboard');loadMusicDraft();render();refreshStudentSettings();refresh();await sync()}catch(e){$('loginError').textContent=e.message}};
 $('switchStudent').onclick=()=>{cancelCamera();state.identity=null;state.ranking=null;store();$('number').value='';show('login')};
 let landmarker=null,stream=null,counter=null,phase='idle',readyFrames=0,lastFrame=-1,raf=0,clock=0,measurementStart=0,deadline=0,activeSettings=null,raisedSince=0;
 const video=$('video'),overlay=$('overlay'),ctx=overlay.getContext('2d');

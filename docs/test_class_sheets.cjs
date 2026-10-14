@@ -13,6 +13,8 @@ class Range {
 for(const method of ['merge','setBackground','setFontColor','setFontWeight','setFontSize','setNumberFormat','setWrap'])Range.prototype[method]=function(){return this};
 class Sheet {
  constructor(name,data=[]){this.name=name;this.data=data;this.meta=[];this.writes=0;this.maxRows=1000}
+ getName(){return this.name}
+ setName(name){sheets.delete(this.name);this.name=name;sheets.set(name,this);return this}
  getLastRow(){let end=this.data.length;while(end&&!this.data[end-1]?.some(value=>value!==''&&value!==undefined))end--;return end}
  getDataRange(){return new Range(this,1,1,Math.max(1,this.getLastRow()),Math.max(1,...this.data.map(row=>row.length)))}
  getRange(row,col,rows,cols){if(typeof row==='string'){const match=row.match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);const num=letters=>[...letters].reduce((sum,c)=>sum*26+c.charCodeAt(0)-64,0);return new Range(this,+match[2],num(match[1]),match[4]?+match[4]-+match[2]+1:1,match[3]?num(match[3])-num(match[1])+1:1)}return new Range(this,row,col,rows,cols)}
@@ -35,23 +37,24 @@ assert.equal(JSON.parse(sheets.get('수업이력').data[1][5]).durationSeconds,6
 const forced=context.ensureLesson_(ss,1,1,'새 수업',true);assert.notEqual(forced.id,changed.id);
 settings.data[1][1]=JSON.stringify({...context.DEFAULTS,durationSeconds:60});context.ensureLesson_(ss,1,1,'설정 변경');
 context.updateClassSheets_(ss);
-const first=sheets.get('1학년 1반'),second=sheets.get('1학년 2반'),third=sheets.get('1학년 3반');
+const first=sheets.get('1학년 1반 줄넘기 기록'),second=sheets.get('1학년 2반 줄넘기 기록'),third=sheets.get('1학년 3반 줄넘기 기록');
 assert.deepEqual(first.data[5].slice(1,6),[2,50,60,2,'높음']);
 assert.equal(first.data[5][7],'','Rope history does not display music moves.');assert.equal(first.data[6][3],30,'All time limits are preserved together.');
 assert.equal(second.data[5][2],0,'Zero is a saved attempt.');
 assert(first.data[1][0].includes('60초'));assert(second.data[1][0].includes('45초'));
-assert(first.data.flat().includes('반1 주제'));assert(!first.data.flat().includes('반2 주제'));
-assert(second.data.flat().some(v=>String(v).includes('반2 동작')));assert(!first.data.flat().some(v=>String(v).includes('반2 동작')));
+const firstMusic=sheets.get('1학년 1반 음악줄넘기 제출'),secondMusic=sheets.get('1학년 2반 음악줄넘기 제출');assert(firstMusic.data.flat().includes('반1 주제'));assert(!firstMusic.data.flat().includes('반2 주제'));assert(!first.data.flat().includes('반1 주제'));assert(!firstMusic.data.flat().some(v=>String(v).includes('줄넘기 설정')));assert(!firstMusic.data.flat().some(v=>String(v).includes('미완료')));
+assert(secondMusic.data.flat().some(v=>String(v).includes('반2 동작')));assert(!firstMusic.data.flat().some(v=>String(v).includes('반2 동작')));
 assert.equal(third.data[5][0],'아직 기록이 없습니다.');
 const priorWrites=first.writes,priorRaw=JSON.stringify(raw.data);
 context.updateClassSheets_(ss);assert.equal(first.writes,priorWrites,'Unchanged polling does not rewrite the class sheet.');
 raw.appendRow(['d','2026-09-30T00:03:00Z',1,1,5,99,90,5,'보통',0,99]);
 context.updateClassSheets_(ss);assert.equal(first.data[5][1],5);assert.equal(first.data[5][3],90);
 music.appendRow(['2026-09-30T00:04:00Z',1,1,2,'같은 조명','=새 주제',JSON.stringify(['모아뛰기','모아뛰기','모아뛰기','모아뛰기'])]);
-context.updateClassSheets_(ss);assert(first.data.flat().includes("'=새 주제"));assert(first.data.flat().includes('반1 주제'),'Prior submissions remain in history.');
+context.updateClassSheets_(ss);assert(firstMusic.data.flat().includes("'=새 주제"));assert(firstMusic.data.flat().includes('반1 주제'),'Prior submissions remain in history.');
 assert.equal(JSON.stringify(raw.data.slice(0,-1)),priorRaw,'Source records remain unchanged.');
 const occupied=new Sheet('1학년 2반',[['교사가 적은 자료']]);
 assert.throws(()=>context.updateClassSheets_({getSheetByName:name=>name==='1학년 2반'?occupied:null}),/기존 자료/);
+const musicWrites=firstMusic.writes;context.updateClassSheets_(ss);assert.equal(firstMusic.writes,musicWrites);const legacy=sheets.get('1학년 3반 줄넘기 기록');legacy.setName('1학년 3반');context.updateClassSheets_(ss);assert.equal(sheets.get('1학년 3반 줄넘기 기록'),legacy,'Existing owned class tab is renamed, not duplicated.');
 context.updateClassSheets_=()=>{throw Error('view failed')};assert.equal(context.updateClassSheetsSafe_({}, {ok:true}).ok,true);
-assert.equal(sheets.size,7,'Only one history source, no per-day tabs.');
+assert.equal(sheets.size,10,'Only one history source, no per-day tabs.');
 console.log('Class sheets passed: all-duration chronology, zero scores, class-specific settings/moves/music, automatic updates, idempotent polling, safe text and source preservation.');
