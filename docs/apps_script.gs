@@ -140,11 +140,8 @@ function musicSubmit_(ss,d) {
   }finally{lock.releaseLock();}
 }
 function teacherData_(ss,d) {
-  var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),s=settings_(ss,classKey_(g,c));
-  var lessonId=currentLessonId_(ss,g,c),lesson=lessonId?fastLesson_(ss,g,c,lessonId):null,sessionId=lesson?lesson.sessionId||lesson.id:'',all=allRecords_(ss,g,c),same=all.filter(function(r){return (r.sessionId||r.lessonId)===sessionId;});
-  var by={},attempts={};same.forEach(function(r){attempts[r.number]=(attempts[r.number]||0)+1;var old=by[r.number];if(!old||(s.recordMode==='latest'?r.createdAt>old.createdAt:r.count>old.count))by[r.number]=r;});
-  var ranking=Object.keys(by).map(function(k){return {number:Number(k),count:by[k].count,attempts:attempts[k]};}).sort(function(a,b){return b.count-a.count||a.number-b.number;});
-  ranking.forEach(function(r){r.rank=1+ranking.filter(function(x){return x.count>r.count;}).length;});
+  var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),live=liveData_(ss,d,true),s=live.settings,lessonId=live.lessonId,sessionId=live.sessionId,byId={};
+  allRecords_(ss,g,c).concat(live.records).forEach(function(r){byId[r.id]=r;});var all=Object.keys(byId).map(function(id){return byId[id];}),ranking=live.ranking;
   var sh=sheet_(ss,MUSIC,MUSIC_HEAD),rows=sh.getDataRange().getValues(),latest=Object.create(null);
   for(var i=1;i<rows.length;i++) if(Number(rows[i][1])===g&&Number(rows[i][2])===c){
     var key=String(rows[i][7]||'기존')+'|'+String(rows[i][4]),moves=[];try{moves=JSON.parse(rows[i][6]);if(moves.length&&typeof moves[0]==='string')moves=[moves];moves=moves.map(function(bar){return bar.map(validMove_);});}catch(e){}
@@ -158,7 +155,7 @@ function setupJumpyClassSheets() {
   var ss=SpreadsheetApp.getActiveSpreadsheet(),lock=LockService.getScriptLock();
   if(!ss)throw Error('앱에 연결된 스프레드시트의 Apps Script에서 실행해 주세요.');
   lock.waitLock(20000);
-  try{[1,2,3].forEach(function(c){ensureLesson_(ss,1,c,'현재 설정 등록');});}
+  try{[1,2,3].forEach(function(c){restoreRecentRopeRound_(ss,1,c);ensureLesson_(ss,1,c,'현재 설정 등록');});}
   finally{lock.releaseLock();}
   [1,2,3].forEach(function(c){var lesson=currentFastLesson_(ss,1,c);ensureRecordBase_(ss,1,c,lesson.sessionId||lesson.id);});
   return refreshClassSheets_(ss);
@@ -412,3 +409,19 @@ function mirrorMusicSettings_(ss){
  [1,2,3].forEach(function(c){ensureMusicLesson_(ss,1,c,'음악 설정 확인');var view=musicStateView_(1,c);[['__music__1-'+c,JSON.stringify(view.musicSettings)],['__moves__1-'+c,JSON.stringify(view.moveOptions)]].forEach(function(pair){var index=rows.findIndex(function(row,i){return i>0&&row[0]===pair[0];});if(index<0){sh.appendRow(pair);rows.push(pair);}else if(rows[index][1]!==pair[1])sh.getRange(index+1,2).setValue(pair[1]);});});
 }
 function musicSettingsLabel_(settings){return settings&&settings.activityType==='music'?'음악 활동 '+(settings.activityOpen?'열림':'닫힘'):'당시 음악 설정 미저장';}
+
+// Upgrade legacy snapshot IDs into a measuring round without rewriting source fields.
+// Explicit new-class boundaries are respected; only an unexpired recorded class is restored.
+function restoreRecentRopeRound_(ss,g,c){
+ var props=PropertiesService.getScriptProperties(),marker='JUMPY_ROUND_MIGRATED_'+g+'_'+c;if(props.getProperty(marker))return;
+ var values=props.getProperties();if(pendingRecords_(values).some(function(item){return Number(item.row[2])===g&&Number(item.row[3])===c;}))return;
+ var recordSheet=sheet_(ss,RECORDS,HEAD),records=recordSheet.getDataRange().getValues(),lessonSheet=sheet_(ss,LESSONS,LESSON_HEAD),lessons=lessonSheet.getDataRange().getValues(),recent=records.slice(1).filter(function(r){return Number(r[2])===g&&Number(r[3])===c;}).sort(function(a,b){return Date.parse(b[1])-Date.parse(a[1]);})[0];
+ if(!recent||Date.now()-Date.parse(recent[1])>=86400000){props.setProperty(marker,'no-recent-class');return;}
+ var end=lessons.findIndex(function(r){return String(r[0])===String(recent[11]);});if(end<1)return;var anchor=end;
+ for(var i=end;i>0;i--)if(Number(lessons[i][2])===g&&Number(lessons[i][3])===c&&lessons[i][4]==='새 수업 시작'){anchor=i;break;}
+ var selected=lessons.map(function(r,i){return {row:r,index:i};}).filter(function(item){return item.index>=anchor&&Number(item.row[2])===g&&Number(item.row[3])===c;});
+ if(selected.some(function(item){return item.row[7]||item.index>end&&item.row[4]==='새 수업 시작';})){props.setProperty(marker,'existing-round');return;}
+ var root=String(lessons[anchor][0]),ids={};selected.forEach(function(item){ids[String(item.row[0])]=true;lessonSheet.getRange(item.index+1,8).setValue(root);props.deleteProperty('JUMPY_FAST_LESSON_'+item.row[0]);props.deleteProperty('JUMPY_RECORD_BASE_'+item.row[0]);});
+ records.forEach(function(r,i){if(i>0&&Number(r[2])===g&&Number(r[3])===c&&ids[String(r[11])]&&!r[14])recordSheet.getRange(i+1,15).setValue(root);});
+ var last=selected[selected.length-1].row,live=jsonSnapshot_(props.getProperty('JUMPY_LIVE_LESSON_'+g+'_'+c))||{id:String(last[0]),revision:'',settings:jsonSnapshot_(last[5])};live.sessionId=root;live.expiresAt=Date.parse(recent[1])+86400000;props.setProperty('JUMPY_LIVE_LESSON_'+g+'_'+c,JSON.stringify(live));props.setProperty(marker,'restored');invalidateLiveClass_(g,c);
+}
