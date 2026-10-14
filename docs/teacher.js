@@ -43,9 +43,9 @@ const livePodiumMotion=createRankingMotion($('rankPodium'),{
 });
 function renderLivePodium(rows,scope){livePodiumMotion.render(podiumGroups(rows),{key:scope})}
 function renderRanking(rows,settings,lessonId=''){
-  const scope=`${$('tGrade').value}-${$('tClass').value}-${settings.durationSeconds}-${settings.recordMode}-${lessonId}`;
+  const scope=`${$('tGrade').value}-${$('tClass').value}-${settings.recordMode}-${lessonId}`;
   latestRanking=rows.map(row=>({...row}));rankingSettings={...settings};rankingScope=scope;
-  $('rankRule').textContent=`${settings.durationSeconds}초 · ${settings.recordMode==='latest'?'마지막 기록':'최고기록'} 반영`;
+  $('rankRule').textContent=`이번 수업 · ${settings.recordMode==='latest'?'마지막 기록':'최고기록'} 반영 · 마지막 기록 후 24시간 유지`;
   if(!rankFinalMode)$('rankLiveStatus').textContent='실시간 · 2초마다 확인';
   $('showFinalRanking').disabled=!rows.length;renderLivePodium(rows,scope);
   if(rankFinalMode&&finalSnapshot){finalSnapshot.rows=latestRanking.map(row=>({...row}));if(finalSnapshot.revealed)updateFinalWinners();}

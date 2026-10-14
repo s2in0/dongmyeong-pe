@@ -104,8 +104,8 @@ function allRecords_(ss,g,c) { var sh=sheet_(ss,RECORDS,HEAD); var rows=sh.getDa
 }
 function views_(records,settings,number,lessonId) {
   var mine=records.filter(function(r){return r.number===number;});
-  // 기록은 같은 제한시간에서만 비교한다. 순위도 학생별 최고/마지막 기록으로 만든다.
-  var same=records.filter(function(r){return r.durationSeconds===settings.durationSeconds&&(r.sessionId||r.lessonId)===lessonId;});
+  // A measuring round stays visible for 24 hours; only a new class resets it early.
+  var same=records.filter(function(r){return (r.sessionId||r.lessonId)===lessonId;});
   var by={}; same.forEach(function(r){var old=by[r.number]; if(!old || (settings.recordMode==='latest' ? r.createdAt>old.createdAt : r.count>old.count)) by[r.number]=r;});
   var ranking=Object.keys(by).map(function(k){return {number:Number(k),count:by[k].count};}).sort(function(a,b){return b.count-a.count || a.number-b.number;});
   // 순위 공개 시 번호와 반영 기록만 제공하며 원본 도전 이력은 제공하지 않는다.
@@ -141,7 +141,7 @@ function musicSubmit_(ss,d) {
 }
 function teacherData_(ss,d) {
   var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),s=settings_(ss,classKey_(g,c));
-  var lessonId=currentLessonId_(ss,g,c),lesson=lessonId?fastLesson_(ss,g,c,lessonId):null,sessionId=lesson?lesson.sessionId||lesson.id:'',all=allRecords_(ss,g,c),same=all.filter(function(r){return r.durationSeconds===s.durationSeconds&&(r.sessionId||r.lessonId)===sessionId;});
+  var lessonId=currentLessonId_(ss,g,c),lesson=lessonId?fastLesson_(ss,g,c,lessonId):null,sessionId=lesson?lesson.sessionId||lesson.id:'',all=allRecords_(ss,g,c),same=all.filter(function(r){return (r.sessionId||r.lessonId)===sessionId;});
   var by={},attempts={};same.forEach(function(r){attempts[r.number]=(attempts[r.number]||0)+1;var old=by[r.number];if(!old||(s.recordMode==='latest'?r.createdAt>old.createdAt:r.count>old.count))by[r.number]=r;});
   var ranking=Object.keys(by).map(function(k){return {number:Number(k),count:by[k].count,attempts:attempts[k]};}).sort(function(a,b){return b.count-a.count||a.number-b.number;});
   ranking.forEach(function(r){r.rank=1+ranking.filter(function(x){return x.count>r.count;}).length;});
@@ -249,15 +249,17 @@ function ensureLesson_(ss,g,c,reason,force){
  var props=PropertiesService.getScriptProperties(),state=classSettingsState_(g,c),appliedKey='JUMPY_SETTINGS_APPLIED_'+g+'_'+c,sh=sheet_(ss,LESSONS,LESSON_HEAD),rows=sh.getDataRange().getValues(),key=classKey_(g,c),s=state?state.settings:settings_(ss,key),moves=[],now=new Date(),previous=null;
  if(state&&state.forceLesson&&props.getProperty(appliedKey)!==state.revision)force=true;
  for(var i=rows.length-1;i>0;i--)if(Number(rows[i][2])===g&&Number(rows[i][3])===c){previous=rows[i];break;}
- var reuse=!force&&previous&&Utilities.formatDate(new Date(previous[1]),'Asia/Seoul','yyyy-MM-dd')===Utilities.formatDate(now,'Asia/Seoul','yyyy-MM-dd')&&previous[5]===JSON.stringify(s),id=reuse?String(previous[0]):Utilities.getUuid();
- var previousSettings=previous?jsonSnapshot_(previous[5]):null,sameRound=!force&&previous&&Utilities.formatDate(new Date(previous[1]),'Asia/Seoul','yyyy-MM-dd')===Utilities.formatDate(now,'Asia/Seoul','yyyy-MM-dd')&&previousSettings&&['durationSeconds','countdownSeconds','sensitivity'].every(function(key){return previousSettings[key]===s[key];}),sessionId=sameRound?String(previous[7]||previous[0]):id;
+ var live=jsonSnapshot_(props.getProperty('JUMPY_LIVE_LESSON_'+g+'_'+c)),sameRound=!force&&previous&&(live?roundAlive_(live,props.getProperties()):now.getTime()-Date.parse(previous[1])<86400000);
+ var reuse=sameRound&&previous[5]===JSON.stringify(s),id=reuse?String(previous[0]):Utilities.getUuid(),sessionId=sameRound?String(previous[7]||previous[0]):id,expiresAt=sameRound&&live?roundExpiresAt_(live,props.getProperties()):now.getTime()+86400000;
  if(!reuse)sh.appendRow([id,now.toISOString(),g,c,force?'새 수업 시작':reason,JSON.stringify(s),'',sessionId]);
  if(state)props.setProperty(appliedKey,state.revision);
  props.setProperty('JUMPY_FAST_LESSON_'+id,JSON.stringify({id:id,createdAt:reuse?String(previous[1]):now.toISOString(),grade:g,classNo:c,sessionId:sessionId,settings:s,settingsVersion:state?state.revision:'',moves:moves}));
- props.setProperty('JUMPY_LIVE_LESSON_'+g+'_'+c,JSON.stringify({id:id,day:Utilities.formatDate(now,'Asia/Seoul','yyyy-MM-dd'),revision:state?state.revision:'',settings:s,sessionId:sessionId}));
+ props.setProperty('JUMPY_LIVE_LESSON_'+g+'_'+c,JSON.stringify({id:id,day:Utilities.formatDate(now,'Asia/Seoul','yyyy-MM-dd'),revision:state?state.revision:'',settings:s,sessionId:sessionId,expiresAt:expiresAt}));
  invalidateLiveClass_(g,c);return {id:id,sessionId:sessionId,settings:s,settingsVersion:state?state.revision:'',moves:moves};
 }
-function currentLessonId_(ss,g,c){var state=classSettingsState_(g,c);if(state&&state.forceLesson&&PropertiesService.getScriptProperties().getProperty('JUMPY_SETTINGS_APPLIED_'+g+'_'+c)!==state.revision)return '';var rows=sheet_(ss,LESSONS,LESSON_HEAD).getDataRange().getValues();for(var i=rows.length-1;i>0;i--)if(Number(rows[i][2])===g&&Number(rows[i][3])===c){if(state&&rows[i][5]!==JSON.stringify(state.settings))return '';return Utilities.formatDate(new Date(rows[i][1]),'Asia/Seoul','yyyy-MM-dd')===Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd')?String(rows[i][0]):'';}return '';}
+function currentLessonId_(ss,g,c){var data=readClassSettings_(ss,{grade:g,classNo:c});return data.lessonId||'';}
+function roundExpiresAt_(live,values){var snapshot=jsonSnapshot_(values['JUMPY_FAST_LESSON_'+live.id]);return Number(live.expiresAt)||(snapshot?Date.parse(snapshot.createdAt)+86400000:0);}
+function roundAlive_(live,values){return !!live&&roundExpiresAt_(live,values)>Date.now();}
 
 function validSequence_(items){
  if(!Array.isArray(items)||items.length<1||items.length>256)throw Error('동작 구간은 1~256개로 구성해 주세요.');
@@ -287,7 +289,7 @@ function saveClassSettings_(ss,d){
 }
 function readClassSettings_(ss,d){
  var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),props=PropertiesService.getScriptProperties(),values=props.getProperties(),state=values[classSettingsKey_(g,c)]?JSON.parse(values[classSettingsKey_(g,c)]):null,raw=values['JUMPY_LIVE_LESSON_'+g+'_'+c],live=raw?JSON.parse(raw):null;
- var day=Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd'),matching=live&&live.day===day&&live.revision===(state?state.revision:'');
+ var matching=roundAlive_(live,values)&&live.revision===(state?state.revision:'');
  // Legacy classes are initialized once by bootstrap/setup, never cached over a teacher save.
  if(!state&&!live){ss=ss||SpreadsheetApp.getActiveSpreadsheet();return {ok:true,settings:settings_(ss,classKey_(g,c)),settingsVersion:'',lessonId:'',requestId:'',...musicStateView_(g,c,values)};}
  return {ok:true,grade:g,classNo:c,settings:state?state.settings:live.settings,requestId:state?state.requestId:'',settingsVersion:state?state.revision:'',lessonId:matching?live.id:'',sessionId:matching?live.sessionId||live.id:'',...musicStateView_(g,c,values)};
@@ -357,7 +359,7 @@ function stageRecord_(d){
   var created=new Date(),measured=new Date(d.createdAt);if(!isNaN(measured.getTime())&&measured.getFullYear()>=2000&&measured.getTime()<=created.getTime()+300000)created=measured;
   var row=[id,created.toISOString(),g,c,n,count,duration,s.countdownSeconds,s.sensitivity,misses,streak,lesson.id,JSON.stringify(s),'',sessionId],json=JSON.stringify(row);
   var total=Object.keys(values).reduce(function(sum,key){return sum+byteLength_(key)+byteLength_(values[key]);},0);if(total+byteLength_(json)>440000||pending.length>=120)throw Error('기록 저장을 정리 중입니다. 이 기기의 기록은 보관하고 자동으로 다시 전송합니다.');
-  if(byteLength_(json)>8000)throw Error('기록 설정 크기를 확인해 주세요.');props.setProperty('JUMPY_PENDING_RECORD_'+id,json);invalidateLiveClass_(g,c);
+  if(byteLength_(json)>8000)throw Error('기록 설정 크기를 확인해 주세요.');props.setProperty('JUMPY_PENDING_RECORD_'+id,json);var liveKey='JUMPY_LIVE_LESSON_'+g+'_'+c,live=jsonSnapshot_(props.getProperty(liveKey));if(live&&(live.sessionId||live.id)===sessionId){live.expiresAt=Date.now()+86400000;props.setProperty(liveKey,JSON.stringify(live));}invalidateLiveClass_(g,c);
   return {ok:true,queued:true,createdAt:row[1],lessonId:lesson.id,sessionId:sessionId};
  }finally{lock.releaseLock();}
 }
@@ -380,7 +382,7 @@ function liveData_(ss,d,teacher){
  var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),n=teacher?0:integer_(d.number,1,99),key='jumpy_live_'+g+'_'+c,cache=CacheService.getScriptCache(),memo=cache.getAll([key])[key],data=memo?JSON.parse(memo):null;
  if(!data){
   var props=PropertiesService.getScriptProperties(),values=props.getProperties(),state=values[classSettingsKey_(g,c)]?JSON.parse(values[classSettingsKey_(g,c)]):null,live=values['JUMPY_LIVE_LESSON_'+g+'_'+c]?JSON.parse(values['JUMPY_LIVE_LESSON_'+g+'_'+c]):null;
-  var matches=live&&live.revision===(state?state.revision:'')&&live.day===Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd'),lesson=matches&&values['JUMPY_FAST_LESSON_'+live.id]?JSON.parse(values['JUMPY_FAST_LESSON_'+live.id]):currentFastLesson_(ss,g,c),sessionId=lesson.sessionId||lesson.id,base=cachedRecordBase_(values,sessionId);
+  var matches=roundAlive_(live,values)&&live.revision===(state?state.revision:''),lesson=matches&&values['JUMPY_FAST_LESSON_'+live.id]?JSON.parse(values['JUMPY_FAST_LESSON_'+live.id]):currentFastLesson_(ss,g,c),sessionId=lesson.sessionId||lesson.id,base=cachedRecordBase_(values,sessionId);
   if(!base){ensureRecordBase_(ss,g,c,sessionId);values=props.getProperties();base=cachedRecordBase_(values,sessionId);if(!base)throw Error('기록 연결을 다시 준비 중입니다.');}
   var pending=pendingRecords_(values).map(function(item){return recordFromRow_(item.row);}).filter(function(r){return r.grade===g&&r.classNo===c;}),byId={};base.concat(pending.filter(function(r){return (r.sessionId||r.lessonId)===sessionId;})).forEach(function(r){byId[r.id]=r;});var rows=Object.keys(byId).map(function(id){return byId[id];}),by={};
   rows.forEach(function(r){var old=by[r.number];if(!old)old=by[r.number]={number:r.number,count:r.count,createdAt:r.createdAt,attempts:0};old.attempts++;if(lesson.settings.recordMode==='latest'?r.createdAt>=old.createdAt:r.count>old.count){old.count=r.count;old.createdAt=r.createdAt;}});

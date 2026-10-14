@@ -1,4 +1,4 @@
-import {createRecordDelivery} from './record_delivery.js?v=33';
+import {createRecordDelivery} from './record_delivery.js?v=34';
 import {DEFAULT_BPM,validBpm,beatMilliseconds} from './music_rhythm.js?v=26';
 import {estimatedTime} from './music_sequence.js?v=28';
 import {MAX_BARS,emptyBar,countBeats,loadBars,packBars,locateBeat} from './music_bars.js?v=29';
@@ -34,7 +34,7 @@ async function flushCloudRecords(){if(flushPending||!flushNeeded||!state.url||!n
 const recordDelivery=createRecordDelivery({send:rec=>api({type:'record',...rec}),onAccepted(rec,result){state.outbox=state.outbox.filter(x=>x.id!==rec.id);const saved=state.records.find(x=>x.id===rec.id);if(saved&&result.createdAt)saved.createdAt=result.createdAt;store();if(result.queued){flushNeeded=true;flushCloudRecords();}},onError(rec,error){$('syncStatus').textContent=`미전송 ${state.outbox.length}건: ${error.message}`;}});
 let outboxFlight=null;
 function sync(){if(!state.url||!navigator.onLine||!state.outbox.length)return Promise.resolve();if(outboxFlight)return outboxFlight;outboxFlight=(async()=>{for(const rec of [...state.outbox]){if(!await recordDelivery.deliver(rec))break;}refreshStudentLive();})().finally(()=>outboxFlight=null);return outboxFlight;}
-function attempts(){if(state.url&&!state.lessonId)return 0;return myRecords().filter(r=>r.durationSeconds===state.settings.durationSeconds&&(!state.url||(r.sessionId||r.lessonId)===(state.sessionId||state.lessonId))).length}
+function attempts(){if(state.url&&!state.lessonId)return 0;return myRecords().filter(r=>(!state.url?r.durationSeconds===state.settings.durationSeconds:(r.sessionId||r.lessonId)===(state.sessionId||state.lessonId))).length}
 function allowed(){const s=state.settings;return (!state.url||settingsConfirmed)&&s.activityOpen&&attempts()<1+(s.retryAllowed?s.retryLimit:0)}
 const studentRankingMotion=createRankingMotion($('leaders'),{
  build(row){const li=document.createElement('li'),place=document.createElement('span'),number=document.createElement('span'),name=document.createElement('span'),movement=document.createElement('small'),score=document.createElement('strong');place.className='place';number.className='student-rank-label';name.textContent=`${row.number}번`;movement.className='rank-movement';number.append(name,movement);li.append(place,number,score);li.rankParts={place,movement,score};return li},
@@ -65,7 +65,7 @@ function applyStudentSettings(data,readSeq){
  if(data.musicSettings&&readSeq>=studentSettingsAppliedSeq){state.musicSettings=data.musicSettings;const changed=JSON.stringify(state.moveOptions)!==JSON.stringify(data.moveOptions);if(Array.isArray(data.moveOptions)){state.moveOptions=data.moveOptions;if(changed)renderMovePalette();}store();$('musicBtn').disabled=!state.musicSettings.activityOpen;$('submitMusic').disabled=submittingMusic||!state.musicSettings.activityOpen;}
  if(readSeq<studentSettingsAppliedSeq)return false;
  const changed=!settingsConfirmed||JSON.stringify(state.settings)!==JSON.stringify(data.settings)||state.lessonId!==data.lessonId;
- if((state.sessionId||state.lessonId)!==(data.sessionId||data.lessonId)||state.settings.durationSeconds!==data.settings.durationSeconds||state.settings.recordMode!==data.settings.recordMode)state.ranking=null;
+ if((state.sessionId||state.lessonId)!==(data.sessionId||data.lessonId)||state.settings.recordMode!==data.settings.recordMode)state.ranking=null;
  studentSettingsAppliedSeq=readSeq;settingsConfirmed=true;state.settings=data.settings;state.lessonId=data.lessonId;state.sessionId=data.sessionId||data.lessonId;state.settingsVersion=data.settingsVersion||'';
  if(changed){store();render();updateReadySettings();if(!$('result').classList.contains('hidden'))$('retryBtn').disabled=!allowed();}
  return true;
