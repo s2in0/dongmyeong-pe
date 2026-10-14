@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';import vm from 'node:vm';import assert from 'node:assert/strict';
 const lib=await import('data:text/javascript;base64,'+Buffer.from(fs.readFileSync(new URL('./music_bars.js',import.meta.url),'utf8')).toString('base64'));
 const A={symbol:'○',label:'모아뛰기'},B={symbol:'↔',label:'번갈아뛰기'},C={symbol:'✕',label:'엇걸기'};
@@ -11,8 +12,8 @@ assert.equal(packed.palette.length,3);assert.deepEqual(lib.unpackBars(packed),so
 assert.deepEqual(lib.locateBeat(song,8),{bar:1,beat:0});assert.equal(lib.locateBeat(song,400),null);
 const maxSong=Array.from({length:512},()=>[A,B,C,A,B,C,A,B]);assert(JSON.stringify(lib.packBars(maxSong)).length<48000,'Even a 4096-beat song fits in a spreadsheet cell.');
 assert.throws(()=>lib.packBars([Array(8).fill(null)]));assert.throws(()=>lib.packBars([...maxSong,Array(8).fill(A)]));
-const context=vm.createContext({LockService:{getUserLock:()=>({waitLock(){},releaseLock(){}})}});vm.runInContext(fs.readFileSync(new URL('./apps_script.gs',import.meta.url),'utf8'),context);
-let row;context.musicStateView_=()=>({musicSettings:{activityType:'music',activityOpen:true}});context.sheet_=()=>({appendRow:r=>row=r});context.ensureMusicLesson_=()=>({id:'lesson',settings:{activityType:'music',activityOpen:true},moves:[A,B,C]});context.updateClassSheetsSafe_=(_,r)=>r;
+const context=vm.createContext({Utilities:{getUuid:()=>crypto.randomUUID(),formatDate:d=>new Date(d).toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'})},LockService:{getUserLock:()=>({waitLock(){},releaseLock(){}})}});vm.runInContext(fs.readFileSync(new URL('./apps_script.gs',import.meta.url),'utf8'),context);
+let row;context.musicStateView_=()=>({musicSettings:{activityType:'music',activityOpen:true}});context.sheet_=()=>({appendRow:r=>row=r,getDataRange:()=>({getValues:()=>[]})});context.ensureMusicLesson_=()=>({id:'lesson',settings:{activityType:'music',activityOpen:true},moves:[A,B,C]});context.updateClassSheetsSafe_=(_,r)=>r;
 const body={grade:1,classNo:2,number:3,groupName:'점프스타',theme:'우리 노래',bpm:125,choreography:packed};
 assert(context.musicSubmit_({},body).ok);assert.equal(row.length,context.MUSIC_HEAD.length);assert.deepEqual(JSON.parse(row[13]),packed);assert.equal(row[12],'','Previous sequence column stays separate.');
 assert.throws(()=>context.musicSubmit_({},{...body,choreography:{palette:[A],bars:[[1]]}}));assert.throws(()=>context.musicSubmit_({},{...body,choreography:{palette:[A],bars:[Array(9).fill(0)]}}));

@@ -8,6 +8,7 @@ var MUSIC_LESSONS='음악수업이력';
 var LESSONS='수업이력', LESSON_HEAD=['id','createdAt','grade','classNo','reason','settings','moves'];
 var MUSIC_HEAD=['createdAt','grade','classNo','number','groupName','theme','moves','lessonId','settingsSnapshot','movesSnapshot','bpm','beatsPerBar','sequence','choreography'];
 HEAD=HEAD.concat(['lessonId','settingsSnapshot','movesSnapshot','sessionId']);
+MUSIC_HEAD=MUSIC_HEAD.concat(['submissionId','audioFileId','audioName','audioMime','audioBytes','audioDuration','audioOffset','beatsPerMove','submissionSignature']);
 var MUSIC_LESSON_HEAD=LESSON_HEAD.slice();LESSON_HEAD=LESSON_HEAD.concat(['sessionId']);
 var DEFAULTS = {durationSeconds:30,countdownSeconds:3,sensitivity:'보통',retryAllowed:true,retryLimit:2,recordMode:'best',rankingVisible:true,activityOpen:true};
 var DEFAULT_MEDALS = [
@@ -35,6 +36,7 @@ function doPost(e) {
       return out_(teacherData_(ss,d));
     }
     if (d.type === 'musicSubmit') return out_(musicSubmit_(ss,d));
+    if(d.type==='musicAudio')return out_(musicAudio_(ss,d));
     if(d.type==='saveMoves'||d.type==='saveMusicSettings'){if(!authorized_(d.pin))return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});return out_(d.type==='saveMoves'?saveMusicMoves_(d):saveMusicSettings_(d));}
     if (d.type === 'saveMedals') {
       if (!authorized_(d.pin)) return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});
@@ -123,7 +125,6 @@ function safeText_(value,max) {
 }
 function musicSubmit_(ss,d) {
   var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),n=validStudentNumber_(g,c,d.number);
-  if(!musicStateView_(g,c).musicSettings.activityOpen)throw Error('이 반의 음악 활동이 닫혔습니다.');
   var group=safeText_(d.groupName,20),theme=safeText_(d.theme,40);
   var choreography=d.choreography===undefined?null:validChoreography_(d.choreography);
   var sequence=choreography||d.sequence===undefined?null:validSequence_(d.sequence);
@@ -133,19 +134,28 @@ function musicSubmit_(ss,d) {
   if(beats===8&&bpm==='')throw Error('음악 빠르기 BPM을 입력해 주세요.');
   if(!sequence&&!choreography&&(!Array.isArray(bars)||bars.length<1||bars.length>16||bars.some(function(row){return !Array.isArray(row)||row.length!==beats;}))) throw Error(beats+'박자 동작 줄을 확인해 주세요.');
   bars=bars.map(function(row){return row.map(validMove_);});
+  var beatsPerMove=d.beatsPerMove===undefined?1:integer_(d.beatsPerMove,1,8);if(beatsPerMove!==1&&beatsPerMove!==8)throw Error('동작 박자 수를 확인해 주세요.');if(choreography&&choreography.bars.reduce(function(sum,row){return sum+row.length;},0)*beatsPerMove>4096)throw Error('한 곡은 최대 4096박자까지 만들 수 있어요.');
+  var submissionId=d.submissionId===undefined?Utilities.getUuid():String(d.submissionId);if(!/^[a-zA-Z0-9-]{12,80}$/.test(submissionId))throw Error('음악 제출 ID를 확인해 주세요.');
+  if(d.audio&&!classRoster_(g,c))throw Error('이 반은 노래 제출 대상에 등록되어 있지 않아요.');
+  var audio=d.audio?validAudio_(d.audio):null,signature=JSON.stringify({g:g,c:c,n:n,group:group,theme:theme,bpm:bpm,bars:bars,sequence:sequence,choreography:choreography,beatsPerMove:beatsPerMove,audio:audio?{checksum:d.audio.checksum,name:audio.name,mime:audio.mime,bytes:audio.bytes.length,duration:audio.duration,offset:audio.offset}:null});
   var lock=LockService.getUserLock();lock.waitLock(20000);
-  try{if(!musicStateView_(g,c).musicSettings.activityOpen)throw Error('이 반의 음악 활동이 닫혔습니다.');var sh=sheet_(ss,MUSIC,MUSIC_HEAD);
-    var lesson=ensureMusicLesson_(ss,g,c,'음악 제출');sh.appendRow([new Date().toISOString(),g,c,n,group,theme,JSON.stringify(bars),lesson.id,JSON.stringify(lesson.settings),JSON.stringify(lesson.moves),bpm,beats,sequence?JSON.stringify(sequence):'',choreography?JSON.stringify(choreography):'']);
-    return {ok:true};
+  try{var sh=sheet_(ss,MUSIC,MUSIC_HEAD),rows=sh.getDataRange().getValues(),old=rows.find(function(row,i){return i>0&&String(row[14])===submissionId;});if(old){if(old[22]!==signature)throw Error('다른 음악 제출에 같은 ID를 사용할 수 없습니다.');return {ok:true,duplicate:true,submissionId:submissionId,songSaved:!!old[15]};}
+    if(!musicStateView_(g,c).musicSettings.activityOpen)throw Error('이 반의 음악 활동이 닫혔습니다.');
+    var today=Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd'),daily=rows.slice(1).filter(function(row){return Number(row[1])===g&&Number(row[2])===c&&Utilities.formatDate(new Date(row[0]),'Asia/Seoul','yyyy-MM-dd')===today;});if(daily.length>=60||audio&&daily.reduce(function(sum,row){return sum+Number(row[18]||0);},0)+audio.bytes.length>150*1024*1024)throw Error('이 반의 오늘 음악 제출 용량을 확인해야 해요. 노래와 안무는 이 기기에 보관합니다.');
+    var lesson=ensureMusicLesson_(ss,g,c,'음악 제출'),songFile=audio?musicFolder_().createFile(Utilities.newBlob(audio.bytes,audio.mime,g+'학년 '+c+'반 '+group+' '+submissionId+' '+audio.name)):null;
+    // Preserve the private file if a write response is lost; retry resolves the submission ID.
+    sh.appendRow([new Date().toISOString(),g,c,n,group,theme,JSON.stringify(bars),lesson.id,JSON.stringify(lesson.settings),JSON.stringify(lesson.moves),bpm,beats,sequence?JSON.stringify(sequence):'',choreography?JSON.stringify(choreography):'',submissionId,songFile?songFile.getId():'',audio?classSheetText_(audio.name):'',audio?audio.mime:'',audio?audio.bytes.length:'',audio?audio.duration:'',audio?audio.offset:'',beatsPerMove,signature]);
+    return {ok:true,submissionId:submissionId,songSaved:!!songFile};
   }finally{lock.releaseLock();}
 }
+
 function teacherData_(ss,d) {
   var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),live=liveData_(ss,d,true),s=live.settings,lessonId=live.lessonId,sessionId=live.sessionId,byId={};
   allRecords_(ss,g,c).concat(live.records).forEach(function(r){byId[r.id]=r;});var all=Object.keys(byId).map(function(id){return byId[id];}),ranking=live.ranking;
   var sh=sheet_(ss,MUSIC,MUSIC_HEAD),rows=sh.getDataRange().getValues(),latest=Object.create(null);
   for(var i=1;i<rows.length;i++) if(Number(rows[i][1])===g&&Number(rows[i][2])===c){
     var key=String(rows[i][7]||'기존')+'|'+String(rows[i][4]),moves=[];try{moves=JSON.parse(rows[i][6]);if(moves.length&&typeof moves[0]==='string')moves=[moves];moves=moves.map(function(bar){return bar.map(validMove_);});}catch(e){}
-    latest[key]={groupName:String(rows[i][4]),theme:String(rows[i][5]),number:Number(rows[i][3]),moves:moves,createdAt:String(rows[i][0]),settingsSnapshot:jsonSnapshot_(rows[i][8])?.activityType==='music'?jsonSnapshot_(rows[i][8]):null,movesSnapshot:jsonSnapshot_(rows[i][9]),bpm:rows[i][10]?Number(rows[i][10]):null,beatsPerBar:Number(rows[i][11])||(moves[0]||[]).length||4,sequence:jsonSnapshot_(rows[i][12]),choreography:jsonSnapshot_(rows[i][13])};
+    latest[key]={groupName:String(rows[i][4]),theme:String(rows[i][5]),number:Number(rows[i][3]),moves:moves,createdAt:String(rows[i][0]),settingsSnapshot:jsonSnapshot_(rows[i][8])?.activityType==='music'?jsonSnapshot_(rows[i][8]):null,movesSnapshot:jsonSnapshot_(rows[i][9]),bpm:rows[i][10]?Number(rows[i][10]):null,beatsPerBar:Number(rows[i][11])||(moves[0]||[]).length||4,sequence:jsonSnapshot_(rows[i][12]),choreography:jsonSnapshot_(rows[i][13]),beatsPerMove:Number(rows[i][21])||1,submissionId:String(rows[i][14]||''),audio:rows[i][15]?{name:String(rows[i][16]),mime:String(rows[i][17]),bytes:Number(rows[i][18]),durationSeconds:Number(rows[i][19]),offsetSeconds:Number(rows[i][20]||0)}:null};
   }
   var result={ok:true,lessonId:lessonId,sessionId:sessionId,settings:s,...musicStateView_(g,c),medals:medals_(ss),moveOptions:moves_(ss,classKey_(g,c)),participants:ranking.map(function(r){return r.number;}),ranking:ranking,records:all.map(function(r){return {id:r.id,createdAt:r.createdAt,number:r.number,count:r.count,durationSeconds:r.durationSeconds,countdownSeconds:r.countdownSeconds,sensitivity:r.sensitivity,lessonId:r.lessonId,sessionId:r.sessionId||r.lessonId,settingsSnapshot:r.settingsSnapshot,activityType:'rope'};}),music:Object.keys(latest).map(function(k){return latest[k];}).sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);})};
   return result;
@@ -220,7 +230,7 @@ function updateClassMusicSheets_(ss,plans){
  var source=sheet_(ss,MUSIC,MUSIC_HEAD).getDataRange().getValues(),props=PropertiesService.getScriptProperties(),saved=props.getProperties();
  plans.forEach(function(plan){
   var music=classMusicSummary_(source,plan.classNo),moves=moves_(ss,classKey_(1,plan.classNo)),settings=musicStateView_(1,plan.classNo).musicSettings;
-  var rows=music.map(function(item){return [classSheetText_(item.groupName),classSheetText_(item.theme),item.number,item.createdAt,musicSettingsLabel_(item.settingsSnapshot),classSheetText_((item.choreography?choreographyLabel_(item.choreography):item.sequence?item.sequence.map(function(s,index){return (index+1)+'구간: '+s.move.symbol+' '+s.move.label+' × '+s.beats+'박';}).join('\n'):item.moves.map(function(bar,index){return (index+1)+'줄: '+bar.map(function(move){return move.symbol+' '+move.label;}).join(' / ');}).join('\n'))),classSheetText_(movesLabel_(item.movesSnapshot)),(item.bpm?item.bpm+' BPM':'당시 BPM 미저장')+' · '+(item.choreography?item.choreography.bars.reduce(function(sum,row){return sum+row.length;},0)+'박 · 박자별 안무':item.sequence?item.sequence.reduce(function(sum,s){return sum+s.beats;},0)+'박 · 동작별 반복':item.beatsPerBar+'박자/줄')];});
+  var rows=music.map(function(item){return [classSheetText_(item.groupName),classSheetText_(item.theme),item.number,item.createdAt,musicSettingsLabel_(item.settingsSnapshot)+(item.audioName?' · 노래: '+item.audioName:''),classSheetText_((item.choreography?choreographyLabel_(item.choreography):item.sequence?item.sequence.map(function(s,index){return (index+1)+'구간: '+s.move.symbol+' '+s.move.label+' × '+s.beats+'박';}).join('\n'):item.moves.map(function(bar,index){return (index+1)+'줄: '+bar.map(function(move){return move.symbol+' '+move.label;}).join(' / ');}).join('\n'))),classSheetText_(movesLabel_(item.movesSnapshot)),(item.bpm?item.bpm+' BPM':'당시 BPM 미저장')+' · '+(item.choreography?item.choreography.bars.reduce(function(sum,row){return sum+row.length;},0)*(item.beatsPerMove||1)+'박 · '+(item.beatsPerMove===8?'동작당 8박':'박자별 안무'):item.sequence?item.sequence.reduce(function(sum,s){return sum+s.beats;},0)+'박 · 동작별 반복':item.beatsPerBar+'박자/줄')];});
   var payload=JSON.stringify({version:'music-only-v1',settings:settings,moves:moves,rows:rows}),key='jumpy_music_summary_'+ss.getId()+'_'+plan.classNo,digest=Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,payload)),sh=ss.getSheetByName(plan.musicName),fresh=!sh||sh.getLastRow()===0;
   if(!fresh&&saved[key]===digest&&sh.getRange('A1').getValue()===plan.musicName)return;
   if(!sh)sh=ss.insertSheet(plan.musicName);var needed=Math.max(7,rows.length+6);if(sh.getMaxRows()<needed)sh.insertRowsAfter(sh.getMaxRows(),needed-sh.getMaxRows());
@@ -243,7 +253,7 @@ function classMusicSummary_(source,classNo){
     if(Number(row[1])!==1||Number(row[2])!==classNo)return;
     var key=String(row[4]),date=row[0] instanceof Date?row[0].toISOString():String(row[0]),bars=[];
     try{bars=JSON.parse(row[6]);if(bars.length&&typeof bars[0]==='string')bars=[bars];bars=bars.map(function(bar){return bar.map(validMove_);});}catch(error){bars=[];}
-    items.push({groupName:key,theme:String(row[5]),number:Number(row[3]),createdAt:isNaN(new Date(date).getTime())?'':new Date(date),stamp:date,moves:bars,settingsSnapshot:jsonSnapshot_(row[8]),movesSnapshot:jsonSnapshot_(row[9]),bpm:row[10]?Number(row[10]):null,beatsPerBar:Number(row[11])||(bars[0]||[]).length||4,sequence:jsonSnapshot_(row[12]),choreography:jsonSnapshot_(row[13])});
+    items.push({groupName:key,theme:String(row[5]),number:Number(row[3]),createdAt:isNaN(new Date(date).getTime())?'':new Date(date),stamp:date,moves:bars,settingsSnapshot:jsonSnapshot_(row[8]),movesSnapshot:jsonSnapshot_(row[9]),bpm:row[10]?Number(row[10]):null,beatsPerBar:Number(row[11])||(bars[0]||[]).length||4,sequence:jsonSnapshot_(row[12]),choreography:jsonSnapshot_(row[13]),beatsPerMove:Number(row[21])||1,audioName:String(row[16]||'')});
   });
   return items.sort(function(a,b){return b.stamp.localeCompare(a.stamp);});
 }
@@ -439,3 +449,22 @@ function restoreRecentRopeRound_(ss,g,c){
 
 function classRoster_(g,c){var total=Number(g)===1?({1:15,2:15,3:14}[Number(c)]||0):0;if(!total)return null;var numbers=[];for(var i=1;i<=total;i++)numbers.push(i);return {numbers:numbers,total:total,maxNumber:total};}
 function validStudentNumber_(g,c,value){var n=integer_(value,1,99),roster=classRoster_(g,c);if(roster&&roster.numbers.indexOf(n)<0)throw Error(g+'학년 '+c+'반 번호는 1~'+roster.maxNumber+'번이에요.');return n;}
+
+function setupJumpyMusicStorage(){var folder=musicFolder_();return {ok:true,folderId:folder.getId()};}
+function musicFolder_(){var props=PropertiesService.getScriptProperties(),id=props.getProperty('JUMPY_MUSIC_FOLDER_ID');if(id)return DriveApp.getFolderById(id);var folder=DriveApp.createFolder('JUMPY_음악줄넘기_제출곡');props.setProperty('JUMPY_MUSIC_FOLDER_ID',folder.getId());return folder;}
+function validAudio_(value){
+ if(!value||typeof value.data!=='string'||value.data.length>13981016||value.data.length%4||!value.data||!/^[A-Za-z0-9+/]*={0,2}$/.test(value.data))throw Error('노래 파일 데이터를 확인해 주세요.');
+ var mime=String(value.mime),name=String(value.name||'').trim();if(!name||name.length>180||/[\x00-\x1f\x7f]/.test(name)||['audio/mpeg','audio/mp4','audio/wav'].indexOf(mime)<0)throw Error('MP3, M4A, WAV 노래 파일을 선택해 주세요.');
+ var bytes=Utilities.base64Decode(value.data);if(!bytes.length||bytes.length>10485760||Number(value.bytes)!==bytes.length)throw Error('노래 파일은 10MB 이하로 선택해 주세요.');
+ var at=function(i){return (bytes[i]||0)&255;},text=function(i,n){var s='';for(var j=i;j<i+n;j++)s+=String.fromCharCode(at(j));return s;};
+ var signature=mime==='audio/mpeg'?(text(0,3)==='ID3'||at(0)===255&&(at(1)&224)===224):mime==='audio/mp4'?text(4,4)==='ftyp':text(0,4)==='RIFF'&&text(8,4)==='WAVE';if(!signature)throw Error('노래 파일 형식을 확인해 주세요.');
+ var duration=Number(value.durationSeconds),offset=Number(value.offsetSeconds||0);if(!isFinite(duration)||duration<=0||duration>3600||!isFinite(offset)||offset<0||offset>=duration)throw Error('노래 길이와 안무 시작 시간을 확인해 주세요.');
+ var hash=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,bytes).map(function(b){return ('0'+((b+256)%256).toString(16)).slice(-2);}).join('');if(hash!==value.checksum)throw Error('노래 파일 전송이 온전하지 않습니다. 다시 제출해 주세요.');
+ return {bytes:bytes,mime:mime,name:name,duration:duration,offset:offset};
+}
+function musicAudio_(ss,d){
+ if(!authorized_(d.pin))throw Error('교사 PIN이 올바르지 않습니다.');var g=integer_(d.grade,1,6),c=integer_(d.classNo,1,30),id=String(d.submissionId||''),rows=sheet_(ss,MUSIC,MUSIC_HEAD).getDataRange().getValues();
+ var row=rows.find(function(r,i){return i>0&&Number(r[1])===g&&Number(r[2])===c&&String(r[14])===id;});if(!row||!row[15])throw Error('이 반의 제출 노래를 찾지 못했어요.');
+ var folder=musicFolder_(),file=DriveApp.getFileById(String(row[15])),parents=file.getParents(),inside=false;while(parents.hasNext())if(parents.next().getId()===folder.getId())inside=true;if(!inside||file.isTrashed())throw Error('제출곡 폴더에서 노래를 찾지 못했어요.');
+ var blob=file.getBlob(),bytes=blob.getBytes();if(bytes.length>10485760)throw Error('노래 파일 크기를 확인해 주세요.');return {ok:true,name:String(row[16]),mime:String(row[17]),data:Utilities.base64Encode(bytes)};
+}

@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -10,10 +11,10 @@ const old=[[1,2,3,4],[5,6,7,8],[9,10,11,12]];
 assert.deepEqual(rhythm.migrateBars(old,x=>x),[[1,2,3,4,5,6,7,8],[9,10,11,12,null,null,null,null]]);
 assert.equal(old[0].length,4,'Migration leaves source data intact.');
 assert.deepEqual(rhythm.migrateBars([[1,2,3,4,5,6,7,8]],x=>x),[[1,2,3,4,5,6,7,8]]);
-const context=vm.createContext({LockService:{getUserLock:()=>({waitLock(){},releaseLock(){}})}});
+const context=vm.createContext({Utilities:{getUuid:()=>crypto.randomUUID(),formatDate:d=>new Date(d).toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'})},LockService:{getUserLock:()=>({waitLock(){},releaseLock(){}})}});
 vm.runInContext(fs.readFileSync(new URL('./apps_script.gs',import.meta.url),'utf8'),context);
 let saved=[],open=true;
-context.musicStateView_=()=>({musicSettings:{activityType:'music',activityOpen:open}});context.sheet_=()=>({appendRow:row=>saved.push(row)});
+context.musicStateView_=()=>({musicSettings:{activityType:'music',activityOpen:open}});context.sheet_=()=>({appendRow:row=>saved.push(row),getDataRange:()=>({getValues:()=>[]})});
 context.ensureMusicLesson_=()=>({id:'lesson',settings:{activityType:'music',activityOpen:true},moves:[]});context.updateClassSheetsSafe_=(_,result)=>result;
 const move={symbol:'○',label:'모아뛰기'},body={grade:1,classNo:2,number:3,groupName:'점프스타',theme:'우리 노래',moves:[Array(8).fill(move)],bpm:150,beatsPerBar:8};
 assert.equal(context.musicSubmit_({},body).ok,true);
