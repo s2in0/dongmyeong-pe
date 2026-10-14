@@ -12,7 +12,7 @@ assert.throws(()=>lib.validateSequence(Array(9).fill({move:A,beats:512})),/4096/
 const context=vm.createContext({LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})}});vm.runInContext(fs.readFileSync(new URL('./apps_script.gs',import.meta.url),'utf8'),context);
 let row;context.settings_=()=>({activityOpen:true});context.sheet_=()=>({appendRow:r=>row=r});context.ensureLesson_=()=>({id:'lesson-a',settings:{durationSeconds:45},moves:[A]});context.updateClassSheetsSafe_=(_,result)=>result;
 const body={grade:1,classNo:3,number:2,groupName:'우리 조',theme:'한 곡',bpm:125,sequence:fullSong};
-assert.equal(context.musicSubmit_({},body).ok,true);assert.equal(row.length,13);assert.equal(JSON.parse(row[12]).length,50);assert.equal(row[6],'[]','Compact sequence avoids oversized spreadsheet cells.');assert.equal(row[10],125);
+assert.equal(context.musicSubmit_({},body).ok,true);assert.equal(row.length,context.MUSIC_HEAD.length);assert.equal(JSON.parse(row[12]).length,50);assert.equal(row[6],'[]','Compact sequence avoids oversized spreadsheet cells.');assert.equal(row[10],125);
 for(const bad of [[{move:A,beats:0}],[{move:A,beats:513}],Array(9).fill({move:A,beats:512}),[{move:null,beats:8}]])assert.throws(()=>context.musicSubmit_({},{...body,sequence:bad}));
 const summary=context.classMusicSummary_([Array.from(context.MUSIC_HEAD),row],3)[0];assert.equal(summary.sequence.length,50);assert.equal(summary.bpm,125);
 console.log('Music sequence passed: full 400-beat song, boundaries, lossless migration, validation, compact server storage and class history.');
