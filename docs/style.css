@@ -18,3 +18,5 @@
 #studentQrCanvas{display:block;width:min(100%,480px);height:auto;aspect-ratio:1;margin:8px auto 16px;image-rendering:pixelated;background:#fff}.qr-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}.qr-actions button{min-height:44px}.qr-link-details{font-size:13px;color:var(--muted);margin-top:12px}.qr-link-details summary{cursor:pointer;min-height:44px;display:flex;align-items:center}.qr-link-details a{display:block;overflow-wrap:anywhere;line-height:1.5;color:var(--brand-dark)}
 .student-qr-dialog:fullscreen,.student-qr-dialog.qr-expanded{width:100vw;max-width:none;height:100dvh;max-height:none;border:0;border-radius:0}.student-qr-dialog:fullscreen #studentQrCanvas,.student-qr-dialog.qr-expanded #studentQrCanvas{width:min(70vh,calc(100vw - 64px));max-width:850px}.student-qr-dialog.qr-expanded{position:fixed;inset:0;margin:0}
 @media(max-width:480px){.student-qr-dialog{padding:18px;border-radius:18px}.qr-heading h2{font-size:21px}.qr-actions button{flex:1 1 40%;font-size:14px}}
+
+.music-tempo{margin-bottom:24px}.music-tempo input{max-width:180px}.music-tempo .music-tip{line-height:1.7}.bar-row .beat-grid{row-gap:10px}
