@@ -1,0 +1,39 @@
+name: Publish JUMPY
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: jumpy-pages
+  cancel-in-progress: true
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Use the standard Actions publishing source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/pages" --jq '{build_type,source,html_url}'
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq '.build_type')" != "workflow" ]; then
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/pages" -f build_type=workflow --jq '{build_type,source,html_url}'
+          fi
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload the student and teacher app
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs
+      - name: Publish
+        id: deployment
+        uses: actions/deploy-pages@v4
