@@ -18,7 +18,9 @@ var DEFAULT_MEDALS = [
   {id:'steady-star',name:'꾸준한 별',type:'attempts',goal:3,image:'steady-star'}
 ];
 var MEDAL_IMAGES=['first-step','silver-rhythm','sky-jump','steady-star','fire-jump','moon-jump','rainbow-jump','crown-jump'];
-var DEFAULT_MOVES=[{symbol:'○',label:'모아뛰기'},{symbol:'↔',label:'번갈아뛰기'},{symbol:'✕',label:'엇걸기'},{symbol:'◇',label:'옆뛰기'}];
+// 음악줄넘기 기본동작(모든 반 공통). 옛 제출물에 이름만 저장된 동작은 LEGACY_MOVES로 기호를 찾습니다.
+var DEFAULT_MOVES=[{symbol:'o',label:'발모아뛰기 1박'},{symbol:'O',label:'발모아뛰기 2박'},{symbol:'so',label:'사이드발모아'},{symbol:'sc',label:'사이드크로스'},{symbol:'ox',label:'발모아크로스'},{symbol:'십자뛰기',label:'십자뛰기'},{symbol:'가위바위보뛰기',label:'가위바위보뛰기'},{symbol:'앞흔들어뛰기',label:'앞흔들어뛰기'},{symbol:'뒤들어모아뛰기',label:'뒤들어모아뛰기'},{symbol:'번갈아뛰기 1박',label:'번갈아뛰기 1박'},{symbol:'번갈아뛰기 2박',label:'번갈아뛰기 2박'},{symbol:'옆흔들어뛰기',label:'옆흔들어뛰기'},{symbol:'지그재그뛰기',label:'지그재그뛰기'}];
+var LEGACY_MOVES=[{symbol:'○',label:'모아뛰기'},{symbol:'↔',label:'번갈아뛰기'},{symbol:'✕',label:'엇걸기'},{symbol:'◇',label:'옆뛰기'}];
 function doGet() { return out_({ok:true,message:'줄넘기 앱 연결됨'}); }
 function doPost(e) {
   try {
@@ -29,6 +31,8 @@ function doPost(e) {
     if(d.type==='record')return out_(stageRecord_(d));
     if(d.type==='studentLive')return out_(liveData_(null,d,false));
     if(d.type==='teacherLive'){if(!authorized_(d.pin))return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});return out_(liveData_(null,d,true));}
+    if(d.type==='musicLibrary'||d.type==='musicLibraryAudio'){var lg=integer_(d.grade,1,6),lc=integer_(d.classNo,1,30);validStudentNumber_(lg,lc,d.number);if(!classRoster_(lg,lc))throw Error('수업용 노래 대상 반이 아닙니다.');return out_(d.type==='musicLibrary'?musicLibrary_():musicLibraryAudio_(d));}
+    if(d.type==='musicLibraryAdmin'){if(!authorized_(d.pin))throw Error('교사 PIN이 올바르지 않습니다.');return out_({ok:true,folderUrl:musicLibraryFolder_().getUrl()});}
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (d.type === 'bootstrap') return out_(bootstrap_(ss, d));
     if (d.type === 'teacherData') {
@@ -67,7 +71,7 @@ function validSettings_(s) {
 }
 function sheet_(ss,name,head) { var sh=ss.getSheetByName(name); if(!sh) sh=ss.insertSheet(name); if(sh.getLastRow()===0){sh.appendRow(head);sh.setFrozenRows(1);} else {var old=sh.getRange(1,1,1,head.length).getValues()[0];for(var i=0;i<head.length;i++){if(old[i]&&old[i]!==head[i])throw Error(name+' 열 구성이 다릅니다.');} if(old.join('|')!==head.join('|'))sh.getRange(1,1,1,head.length).setValues([head]);} return sh; }
 function validMove_(value) {
-  if(typeof value==='string') { var old=DEFAULT_MOVES.find(function(m){return m.label===value;}); if(!old) throw Error('동작을 확인해 주세요.'); return old; }
+  if(typeof value==='string') { var old=LEGACY_MOVES.find(function(m){return m.label===value;}); if(!old) throw Error('동작을 확인해 주세요.'); return old; }
   var symbol=String(value&&value.symbol||'').trim(),label=String(value&&value.label||'').trim();
   if(!symbol||symbol.length>8||!label||label.length>20||/[\x00-\x1f\x7f]/.test(symbol+label)) throw Error('동작 기호(8자 이하)와 이름(20자 이하)을 확인해 주세요.');
   return {symbol:symbol,label:label};
@@ -136,15 +140,17 @@ function musicSubmit_(ss,d) {
   bars=bars.map(function(row){return row.map(validMove_);});
   var beatsPerMove=d.beatsPerMove===undefined?1:integer_(d.beatsPerMove,1,8);if(beatsPerMove!==1&&beatsPerMove!==8)throw Error('동작 박자 수를 확인해 주세요.');if(choreography&&choreography.bars.reduce(function(sum,row){return sum+row.length;},0)*beatsPerMove>4096)throw Error('한 곡은 최대 4096박자까지 만들 수 있어요.');
   var submissionId=d.submissionId===undefined?Utilities.getUuid():String(d.submissionId);if(!/^[a-zA-Z0-9-]{12,80}$/.test(submissionId))throw Error('음악 제출 ID를 확인해 주세요.');
-  if(d.audio&&!classRoster_(g,c))throw Error('이 반은 노래 제출 대상에 등록되어 있지 않아요.');
-  var audio=d.audio?validAudio_(d.audio):null,signature=JSON.stringify({g:g,c:c,n:n,group:group,theme:theme,bpm:bpm,bars:bars,sequence:sequence,choreography:choreography,beatsPerMove:beatsPerMove,audio:audio?{checksum:d.audio.checksum,name:audio.name,mime:audio.mime,bytes:audio.bytes.length,duration:audio.duration,offset:audio.offset}:null});
+  if((d.audio||d.librarySong)&&!classRoster_(g,c))throw Error('이 반은 노래 제출 대상에 등록되어 있지 않아요.');
+  if(d.audio&&d.librarySong)throw Error('노래는 하나만 선택해 주세요.');
+  var library=d.librarySong?validLibraryReference_(d.librarySong):null,audio=d.audio?validAudio_(d.audio):null,signature=JSON.stringify({g:g,c:c,n:n,group:group,theme:theme,bpm:bpm,bars:bars,sequence:sequence,choreography:choreography,beatsPerMove:beatsPerMove,audio:audio?{checksum:d.audio.checksum,name:audio.name,mime:audio.mime,bytes:audio.bytes.length,duration:audio.duration,offset:audio.offset}:null});if(library)signature=JSON.stringify({submission:signature,library:library});
   var lock=LockService.getUserLock();lock.waitLock(20000);
   try{var sh=sheet_(ss,MUSIC,MUSIC_HEAD),rows=sh.getDataRange().getValues(),old=rows.find(function(row,i){return i>0&&String(row[14])===submissionId;});if(old){if(old[22]!==signature)throw Error('다른 음악 제출에 같은 ID를 사용할 수 없습니다.');return {ok:true,duplicate:true,submissionId:submissionId,songSaved:!!old[15]};}
     if(!musicStateView_(g,c).musicSettings.activityOpen)throw Error('이 반의 음악 활동이 닫혔습니다.');
-    var today=Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd'),daily=rows.slice(1).filter(function(row){return Number(row[1])===g&&Number(row[2])===c&&Utilities.formatDate(new Date(row[0]),'Asia/Seoul','yyyy-MM-dd')===today;});if(daily.length>=60||audio&&daily.reduce(function(sum,row){return sum+Number(row[18]||0);},0)+audio.bytes.length>150*1024*1024)throw Error('이 반의 오늘 음악 제출 용량을 확인해야 해요. 노래와 안무는 이 기기에 보관합니다.');
-    var lesson=ensureMusicLesson_(ss,g,c,'음악 제출'),songFile=audio?musicFolder_().createFile(Utilities.newBlob(audio.bytes,audio.mime,g+'학년 '+c+'반 '+group+' '+submissionId+' '+audio.name)):null;
+    var libraryFile=library?libraryFile_(library.id,library.version):null;if(libraryFile)audio={name:libraryFile.getName(),mime:libraryMime_(libraryFile),size:libraryFile.getSize(),duration:library.durationSeconds,offset:library.offsetSeconds};
+    var audioSize=audio?(audio.size||audio.bytes.length):0,today=Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd'),daily=rows.slice(1).filter(function(row){return Number(row[1])===g&&Number(row[2])===c&&Utilities.formatDate(new Date(row[0]),'Asia/Seoul','yyyy-MM-dd')===today;});if(daily.length>=60||audio&&daily.reduce(function(sum,row){return sum+Number(row[18]||0);},0)+audioSize>150*1024*1024)throw Error('이 반의 오늘 음악 제출 용량을 확인해야 해요. 노래와 안무는 이 기기에 보관합니다.');
+    var lesson=ensureMusicLesson_(ss,g,c,'음악 제출'),songName=g+'학년 '+c+'반 '+group+' '+submissionId+' '+(audio?audio.name:''),songFile=libraryFile?libraryFile.makeCopy(songName,musicFolder_()):audio?musicFolder_().createFile(Utilities.newBlob(audio.bytes,audio.mime,songName)):null;
     // Preserve the private file if a write response is lost; retry resolves the submission ID.
-    sh.appendRow([new Date().toISOString(),g,c,n,group,theme,JSON.stringify(bars),lesson.id,JSON.stringify(lesson.settings),JSON.stringify(lesson.moves),bpm,beats,sequence?JSON.stringify(sequence):'',choreography?JSON.stringify(choreography):'',submissionId,songFile?songFile.getId():'',audio?classSheetText_(audio.name):'',audio?audio.mime:'',audio?audio.bytes.length:'',audio?audio.duration:'',audio?audio.offset:'',beatsPerMove,signature]);
+    sh.appendRow([new Date().toISOString(),g,c,n,group,theme,JSON.stringify(bars),lesson.id,JSON.stringify(lesson.settings),JSON.stringify(lesson.moves),bpm,beats,sequence?JSON.stringify(sequence):'',choreography?JSON.stringify(choreography):'',submissionId,songFile?songFile.getId():'',audio?classSheetText_(audio.name):'',audio?audio.mime:'',audio?audioSize:'',audio?audio.duration:'',audio?audio.offset:'',beatsPerMove,signature]);
     return {ok:true,submissionId:submissionId,songSaved:!!songFile};
   }finally{lock.releaseLock();}
 }
@@ -452,6 +458,14 @@ function validStudentNumber_(g,c,value){var n=integer_(value,1,99),roster=classR
 
 function setupJumpyMusicStorage(){var folder=musicFolder_();return {ok:true,folderId:folder.getId()};}
 function musicFolder_(){var props=PropertiesService.getScriptProperties(),id=props.getProperty('JUMPY_MUSIC_FOLDER_ID');if(id)return DriveApp.getFolderById(id);var folder=DriveApp.createFolder('JUMPY_음악줄넘기_제출곡');props.setProperty('JUMPY_MUSIC_FOLDER_ID',folder.getId());return folder;}
+function setupJumpyMusicLibrary(){return {ok:true,folderUrl:musicLibraryFolder_().getUrl()};}
+function musicLibraryFolder_(){var props=PropertiesService.getScriptProperties(),id=props.getProperty('JUMPY_MUSIC_LIBRARY_ID');if(id)return DriveApp.getFolderById(id);var lock=LockService.getScriptLock();lock.waitLock(20000);try{id=props.getProperty('JUMPY_MUSIC_LIBRARY_ID');if(id)return DriveApp.getFolderById(id);var folder=musicFolder_().createFolder('선생님_수업용_노래');props.setProperty('JUMPY_MUSIC_LIBRARY_ID',folder.getId());return folder;}finally{lock.releaseLock();}}
+function libraryMime_(file){var ext=file.getName().split('.').pop().toLowerCase(),types={mp3:'audio/mpeg',m4a:'audio/mp4',wav:'audio/wav'},mime=file.getMimeType();return types[ext]&&[types[ext],'audio/x-wav','audio/x-m4a','application/octet-stream'].indexOf(mime)>=0?types[ext]:null;}
+function libraryVersion_(file){return String(file.getLastUpdated().getTime())+'-'+file.getSize();}
+function libraryFile_(id,version){if(!/^[a-zA-Z0-9_-]{10,160}$/.test(String(id)))throw Error('수업용 노래를 확인해 주세요.');var file=DriveApp.getFileById(String(id)),parents=file.getParents(),folderId=musicLibraryFolder_().getId(),inside=false;while(parents.hasNext())if(parents.next().getId()===folderId)inside=true;if(!inside||file.isTrashed()||!libraryMime_(file)||file.getSize()<=0||file.getSize()>10485760)throw Error('수업용 노래 폴더의 10MB 이하 MP3·M4A·WAV만 선택할 수 있어요.');if(version&&libraryVersion_(file)!==String(version))throw Error('선생님이 노래를 변경했어요. 목록을 새로고침하고 다시 선택해 주세요.');return file;}
+function musicLibrary_(){var files=musicLibraryFolder_().getFiles(),songs=[],scanned=0;while(files.hasNext()&&scanned++<200){var file=files.next(),mime=libraryMime_(file);if(!file.isTrashed()&&mime&&file.getSize()>0&&file.getSize()<=10485760)songs.push({id:file.getId(),name:file.getName(),mime:mime,bytes:file.getSize(),version:libraryVersion_(file)});}songs.sort(function(a,b){return a.name.localeCompare(b.name);});return {ok:true,songs:songs};}
+function musicLibraryAudio_(d){var file=libraryFile_(d.id,d.version),blob=file.getBlob(),bytes=blob.getBytes();if(bytes.length>10485760)throw Error('노래는 10MB 이하로 넣어 주세요.');return {ok:true,id:file.getId(),version:libraryVersion_(file),name:file.getName(),mime:libraryMime_(file),data:Utilities.base64Encode(bytes)};}
+function validLibraryReference_(value){var id=String(value.id||''),version=String(value.version||''),duration=Number(value.durationSeconds),offset=Number(value.offsetSeconds||0);if(!/^[a-zA-Z0-9_-]{10,160}$/.test(id)||!/^\d{10,16}-\d{1,8}$/.test(version)||!isFinite(duration)||duration<=0||duration>3600||!isFinite(offset)||offset<0||offset>=duration)throw Error('선택한 노래 정보를 확인해 주세요.');return {id:id,version:version,durationSeconds:duration,offsetSeconds:offset};}
 function validAudio_(value){
  if(!value||typeof value.data!=='string'||value.data.length>13981016||value.data.length%4||!value.data||!/^[A-Za-z0-9+/]*={0,2}$/.test(value.data))throw Error('노래 파일 데이터를 확인해 주세요.');
  var mime=String(value.mime),name=String(value.name||'').trim();if(!name||name.length>180||/[\x00-\x1f\x7f]/.test(name)||['audio/mpeg','audio/mp4','audio/wav'].indexOf(mime)<0)throw Error('MP3, M4A, WAV 노래 파일을 선택해 주세요.');
@@ -467,4 +481,12 @@ function musicAudio_(ss,d){
  var row=rows.find(function(r,i){return i>0&&Number(r[1])===g&&Number(r[2])===c&&String(r[14])===id;});if(!row||!row[15])throw Error('이 반의 제출 노래를 찾지 못했어요.');
  var folder=musicFolder_(),file=DriveApp.getFileById(String(row[15])),parents=file.getParents(),inside=false;while(parents.hasNext())if(parents.next().getId()===folder.getId())inside=true;if(!inside||file.isTrashed())throw Error('제출곡 폴더에서 노래를 찾지 못했어요.');
  var blob=file.getBlob(),bytes=blob.getBytes();if(bytes.length>10485760)throw Error('노래 파일 크기를 확인해 주세요.');return {ok:true,name:String(row[16]),mime:String(row[17]),data:Utilities.base64Encode(bytes)};
+}
+
+/** Apps Script 편집기에서 한 번 실행: 1학년 1~3반 음악줄넘기 동작 목록을 새 기본동작으로 맞춥니다. */
+function applyDefaultMusicMovesToAllClasses(){
+  var props=PropertiesService.getScriptProperties(),lock=LockService.getScriptLock();lock.waitLock(20000);
+  try{[1,2,3].forEach(function(c){props.setProperty('JUMPY_MUSIC_MOVES_1_'+c,JSON.stringify({moves:validMoveOptions_(DEFAULT_MOVES),revision:Utilities.getUuid()}));invalidateLiveClass_(1,c);});}
+  finally{lock.releaseLock();}
+  return refreshClassSheets_(SpreadsheetApp.getActiveSpreadsheet());
 }
