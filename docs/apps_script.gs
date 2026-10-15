@@ -240,8 +240,8 @@ function updateClassMusicSheets_(ss,plans){
  var source=sheet_(ss,MUSIC,MUSIC_HEAD).getDataRange().getValues(),props=PropertiesService.getScriptProperties(),saved=props.getProperties();
  plans.forEach(function(plan){
   var music=classMusicSummary_(source,plan.classNo),moves=moves_(ss,classKey_(1,plan.classNo)),settings=musicStateView_(1,plan.classNo).musicSettings;
-  var rows=music.map(function(item){return [classSheetText_(item.groupName),classSheetText_(item.theme),item.number,item.createdAt,musicSettingsLabel_(item.settingsSnapshot)+(item.audioName?' · 노래: '+item.audioName:''),classSheetText_((item.choreography?choreographyLabel_(item.choreography):item.sequence?item.sequence.map(function(s,index){return (index+1)+'구간: '+s.move.symbol+' '+s.move.label+' × '+s.beats+'박';}).join('\n'):item.moves.map(function(bar,index){return (index+1)+'줄: '+bar.map(function(move){return move.symbol+' '+move.label;}).join(' / ');}).join('\n'))),classSheetText_(movesLabel_(item.movesSnapshot)),(item.bpm?item.bpm+' BPM':'당시 BPM 미저장')+(item.playbackRate&&item.playbackRate!==1?' · '+item.playbackRate+'배속':'')+' · '+(item.choreography?item.choreography.bars.reduce(function(sum,row){return sum+row.length;},0)*(item.beatsPerMove||1)+'박 · '+(item.beatsPerMove===8?'동작당 8박':'박자별 안무'):item.sequence?item.sequence.reduce(function(sum,s){return sum+s.beats;},0)+'박 · 동작별 반복':item.beatsPerBar+'박자/줄')];});
-  var payload=JSON.stringify({version:'music-only-v1',settings:settings,moves:moves,rows:rows}),key='jumpy_music_summary_'+ss.getId()+'_'+plan.classNo,digest=Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,payload)),sh=ss.getSheetByName(plan.musicName),fresh=!sh||sh.getLastRow()===0;
+  var rows=music.map(function(item){return [classSheetText_(item.groupName),classSheetText_(item.theme),item.number,item.createdAt,musicSettingsLabel_(item.settingsSnapshot)+(item.audioName?' · 노래: '+item.audioName:''),classSheetText_((item.choreography?choreographyLabel_(item.choreography):item.sequence?item.sequence.map(function(s,index){return (index+1)+'구간: '+moveLabel_(s.move)+' × '+s.beats+'박';}).join('\n'):item.moves.map(function(bar,index){return (index+1)+'줄: '+bar.map(moveLabel_).join(' / ');}).join('\n'))),classSheetText_(movesLabel_(item.movesSnapshot)),(item.bpm?item.bpm+' BPM':'당시 BPM 미저장')+(item.playbackRate&&item.playbackRate!==1?' · '+item.playbackRate+'배속':'')+' · '+(item.choreography?item.choreography.bars.reduce(function(sum,row){return sum+row.length;},0)*(item.beatsPerMove||1)+'박 · '+(item.beatsPerMove===8?'동작당 8박':'박자별 안무'):item.sequence?item.sequence.reduce(function(sum,s){return sum+s.beats;},0)+'박 · 동작별 반복':item.beatsPerBar+'박자/줄')];});
+  var payload=JSON.stringify({version:'music-only-v2',settings:settings,moves:moves,rows:rows}),key='jumpy_music_summary_'+ss.getId()+'_'+plan.classNo,digest=Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,payload)),sh=ss.getSheetByName(plan.musicName),fresh=!sh||sh.getLastRow()===0;
   if(!fresh&&saved[key]===digest&&sh.getRange('A1').getValue()===plan.musicName)return;
   if(!sh)sh=ss.insertSheet(plan.musicName);var needed=Math.max(7,rows.length+6);if(sh.getMaxRows()<needed)sh.insertRowsAfter(sh.getMaxRows(),needed-sh.getMaxRows());
   if(fresh){sh.getRange('A1:H1').merge();sh.getRange('A2:H2').merge();sh.setFrozenRows(5);sh.setTabColor('#8b6fdf');sh.getRange('A1:H1').setFontSize(18).setFontWeight('bold').setFontColor('#2469d4');sh.getRange('A2:H2').setFontColor('#717987');sh.getRange('A3:H3').setBackground('#eaf3ff');sh.addDeveloperMetadata('JUMPY_MUSIC_CLASS_SUMMARY','v1');}
@@ -271,7 +271,9 @@ function out_(v) { return ContentService.createTextOutput(JSON.stringify(v)).set
 
 function jsonSnapshot_(value){try{return value?JSON.parse(value):null;}catch(e){return null;}}
 function settingsLabel_(s){return s?s.durationSeconds+'초 · 준비 '+s.countdownSeconds+'초 · 민감도 '+s.sensitivity+' · '+(s.recordMode==='latest'?'마지막':'최고')+' 기록 · 재도전 '+(s.retryAllowed?s.retryLimit+'회':'불가')+' · 순위 '+(s.rankingVisible?'공개':'비공개')+' · 활동 '+(s.activityOpen?'열림':'닫힘'):'당시 설정 미저장';}
-function movesLabel_(moves){return moves?moves.map(function(m){return m.symbol+' '+m.label;}).join(' / ')||'등록 동작 없음':'당시 동작 미저장';}
+// 이름이 곧 기호인 동작(예: 십자뛰기)은 한 번만 적습니다.
+function moveLabel_(m){return m.symbol===m.label?m.label:m.symbol+' '+m.label;}
+function movesLabel_(moves){return moves?moves.map(moveLabel_).join(' / ')||'등록 동작 없음':'당시 동작 미저장';}
 // 날짜별 탭 대신 하나의 원본에 반별 수업 스냅샷을 누적합니다. 같은 날 같은 설정은 재사용합니다.
 function ensureLesson_(ss,g,c,reason,force){
  var props=PropertiesService.getScriptProperties(),state=classSettingsState_(g,c),appliedKey='JUMPY_SETTINGS_APPLIED_'+g+'_'+c,sh=sheet_(ss,LESSONS,LESSON_HEAD),rows=sh.getDataRange().getValues(),key=classKey_(g,c),s=state?state.settings:settings_(ss,key),moves=[],now=new Date(),previous=null;
@@ -301,7 +303,7 @@ function validChoreography_(value){
  if(total>4096)throw Error('한 곡은 최대 4096박자까지 만들 수 있어요.');return {palette:palette,bars:bars};
 }
 function choreographyLabel_(value){
- var legend=value.palette.map(function(m){return m.symbol+' '+m.label;}).join(' / '),lines=value.bars.map(function(row,i){return (i+1)+'줄: '+row.map(function(n){return Array.isArray(n)?'['+n.map(function(j){return value.palette[j].symbol;}).join('·')+']':value.palette[n].symbol;}).join(' ');}).join('\n');
+ var legend=value.palette.map(moveLabel_).join(' / '),lines=value.bars.map(function(row,i){return (i+1)+'줄: '+row.map(function(n){return Array.isArray(n)?'['+n.map(function(j){return value.palette[j].symbol;}).join('·')+']':value.palette[n].symbol;}).join(' ');}).join('\n');
  var text=legend+'\n'+lines;return text.length>47000?text.slice(0,47000)+'\n… 전체 안무는 음악줄넘기 원본과 선생님 화면에서 확인':text;
 }
 

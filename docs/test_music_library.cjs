@@ -44,3 +44,7 @@ assert.throws(()=>context.musicSubmit_(ss,{...body,submissionId:crypto.randomUUI
 assert.equal(context.validBpm_(31.25),31.25);
 const teacherRow=context.classMusicSummary_([Array.from(context.MUSIC_HEAD),row],2)[0];assert.equal(teacherRow.playbackRate,0.5);
 console.log('music library ok');
+// 이름이 곧 기호인 동작은 시트에 한 번만 적힘
+assert.equal(context.movesLabel_([{symbol:'십자뛰기',label:'십자뛰기'},{symbol:'o',label:'발모아뛰기 1박'}]),'십자뛰기 / o 발모아뛰기 1박');
+assert.match(context.choreographyLabel_({palette:[{symbol:'십자뛰기',label:'십자뛰기'}],bars:[[0]]}),/^십자뛰기\n/);
+console.log('sheet labels ok');
