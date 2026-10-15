@@ -5,7 +5,7 @@ import {initStudentQr} from './teacher_qr.js?v=23';
 import {studentLink} from './student_access.js?v=23';
 import {recordDay,recordTime,filterRecords,summarizeRecords,recordsCsv} from './teacher_records.js?v=22';
 import {createRankingMotion,showAnimatedCount,podiumGroups,reducedMotion} from './ranking_motion.js?v=19';
-import {initSymbolFit} from './symbol_fit.js?v=38';
+import {initSymbolFit} from './symbol_fit.js?v=39';
 initSymbolFit();
 const $=id=>document.getElementById(id);
 const DEFAULT_URL='https://script.google.com/macros/s/AKfycbzeU4BDW7u8fluc1OT5i-C1wYiMAHuzBT2myOpQbi89GcR6i8rHx5mLBVoWlT0IcRt6zQ/exec';

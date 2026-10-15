@@ -9,7 +9,7 @@ import {MAX_BARS,emptyBar,countBeats,loadBars,packBars,locateBeat} from './music
 import {studentClass} from './student_access.js?v=23';
 // Load camera inference only when measurement starts; music editing works without it.
 import {createRankingMotion,showAnimatedCount} from './ranking_motion.js?v=19';
-import {initSymbolFit} from './symbol_fit.js?v=38';
+import {initSymbolFit} from './symbol_fit.js?v=39';
 initSymbolFit();
 const $=id=>document.getElementById(id), KEY='jr_pwa_v1';
 const DEFAULT_SHEET_URL='https://script.google.com/macros/s/AKfycbzeU4BDW7u8fluc1OT5i-C1wYiMAHuzBT2myOpQbi89GcR6i8rHx5mLBVoWlT0IcRt6zQ/exec';

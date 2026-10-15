@@ -36,7 +36,9 @@ function fitAll(){
 function schedule(){
   if(scheduled)return;
   scheduled=true;
-  requestAnimationFrame(fitAll);
+  // 화면이 가려져 있으면 requestAnimationFrame이 멈추므로 타이머로도 한 번 더 맞춥니다.
+  const run=()=>{if(scheduled)fitAll()};
+  requestAnimationFrame(run);setTimeout(run,120);
 }
 
 export function initSymbolFit(){
