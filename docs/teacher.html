@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>JUMPY 교사 화면</title>
-  <link rel="stylesheet" href="style.css?v=39">
+  <link rel="stylesheet" href="style.css?v=40">
 </head>
 <body class="teacher-app">
 <main class="teacher-shell">
@@ -87,7 +87,7 @@
         </section>
         <section id="musicCard" class="teacher-pane hidden">
           <div class="pane-heading"><div><span class="eyebrow">MUSIC JUMP</span><h2>음악 줄넘기 제출</h2><p class="subtle">우리 반의 조별 안무</p></div><button id="musicFullscreen" class="secondary presentation-button">⛶ 전체화면</button></div>
-          <div class="teacher-checks"><label class="check"><input id="musicActivityOpen" type="checkbox" checked> 음악 줄넘기 활동 열기</label></div><p class="subtle">줄넘기 기록의 시간·재도전 설정과 별도로 적용돼요.</p><button id="startMusicLesson" class="secondary" type="button">새 음악 수업 시작</button> <button id="saveMusicSettings" class="primary" type="button">음악 활동 설정 저장</button><p id="musicSettingsStatus" class="status-line" role="status"></p><div id="musicSubmissions" class="music-wall"></div>
+          <div class="teacher-checks"><label class="check"><input id="musicActivityOpen" type="checkbox" checked> 음악 줄넘기 활동 열기</label></div><p class="subtle">줄넘기 기록의 시간·재도전 설정과 별도로 적용돼요.</p><button id="startMusicLesson" class="secondary" type="button">새 음악 수업 시작</button> <button id="saveMusicSettings" class="primary" type="button">음악 활동 설정 저장</button><p id="musicSettingsStatus" class="status-line" role="status"></p><section class="song-library" aria-labelledby="songLibraryTitle"><div class="section-heading"><h3 id="songLibraryTitle">이 반 수업용 노래</h3><a id="songFolderLink" class="text-button" target="_blank" rel="noopener">드라이브 폴더 열기 ↗</a></div><p class="subtle">학생들이 고른 노래를 올리면 BPM이 자동으로 계산돼요. 이 반 학생 화면의 노래 목록에 바로 나타나요. (MP3·M4A·WAV, 한 곡 10MB 이하, 여러 곡 한꺼번에 가능)</p><div class="song-upload-row"><input id="songLibraryFile" type="file" multiple accept="audio/mpeg,audio/mp4,audio/wav,.mp3,.m4a,.wav" aria-label="올릴 노래 파일"><button id="uploadLibrarySongs" class="primary" type="button">노래 올리기</button></div><p id="songLibraryStatus" class="status-line" role="status"></p><ul id="songLibraryList" class="song-library-list"></ul></section><h3 class="music-wall-title">조별 제출 · 누르면 발표 화면이 열려요</h3><div id="musicSubmissions" class="music-wall"></div>
         </section>
       </div>
     </div>
@@ -101,6 +101,6 @@
   <p id="studentQrStatus" class="status-line" role="status"></p>
   <details class="qr-link-details"><summary>접속 링크 보기</summary><a id="studentQrLink" target="_blank" rel="noopener"></a></details>
 </dialog>
-<script type="module" src="teacher.js?v=39"></script>
+<script type="module" src="teacher.js?v=40"></script>
 </body>
 </html>

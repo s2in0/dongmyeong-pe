@@ -33,3 +33,37 @@
 
 .submitted-song{border-top:1px solid #73809328;padding-top:12px;margin-top:12px}.submitted-song audio{max-width:100%;width:100%;margin-top:8px}.submitted-song button{font-size:12px;min-height:44px}
 .fit-sym{display:block;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:clip}.bar-mini-beat.fit-sym{text-overflow:ellipsis}.move-palette .move-symbol.fit-sym{min-width:0;flex:0 1 auto}.move-palette button.same-name .move-label{display:none}.practice-focus>strong.fit-sym{max-width:min(100%,520px)}.music-beat b.fit-sym{width:100%;text-align:center}.fit-sym.fit-2{line-height:1.1;text-align:center;overflow-wrap:anywhere;text-wrap-style:balance}
+/* 노래 고르기 · 배속 (BPM 위) */
+.song-pick{margin:0 0 18px;padding:16px;background:#f7faff;border:1px solid var(--line);border-radius:18px}.song-pick-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px}.song-pick .song-info{margin:10px 0 0}.song-pick .status-line{margin:6px 0 0;min-height:0}
+/* 칸 나누기 (위아래로 4박×2, 2박×4) */
+.song-bar .beat{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;height:108px;min-height:0;overflow:hidden}.song-bar .beat strong{margin:0;max-width:100%}.song-bar .beat .beat-label{max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.beat-parts{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;gap:3px}.beat-part{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;border-radius:7px;background:#eef4ff;color:var(--ink);padding:0 2px;overflow:hidden}.beat-part.selected{background:var(--brand);color:#fff}.beat-part b{font-size:20px;line-height:1.1;max-width:100%}.beat-parts.n4 .beat-part b{font-size:14px}
+.split-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 12px}.split-title{font-size:13px;font-weight:800;color:var(--brand-dark);margin-right:4px}.split-option{min-height:44px;padding:8px 14px;border-radius:12px;border:1px solid var(--line);background:#fff;color:#3b4c66;font-weight:750;font-size:13px}.split-option.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+/* 동작 고르기: 기호+이름을 한 덩어리로 네모칸에 맞춤 */
+.move-palette .move-fit{display:block;max-width:100%;font-size:14px;white-space:nowrap;overflow:hidden;line-height:1.2}.move-palette .move-fit .move-symbol{font-size:1.7em;line-height:1;vertical-align:middle;margin-right:.3em}.move-palette .move-fit .move-label{font-size:1em;vertical-align:middle;white-space:nowrap}.move-palette button.same-name .move-fit .move-symbol{font-size:1.25em;margin:0}
+/* 안무 보드: 학생 재생 · 선생님 발표 공용. 지금 칸의 박자 칸이 BPM에 맞춰 하나씩 색칠됩니다. */
+.cv-wrap{margin:18px 0;max-height:72vh;overflow:auto;border:2px solid #f0c75e;border-radius:20px;background:#fffdf5;padding:12px}.cv-title{font-weight:850;color:var(--brand-dark);margin:0 0 10px}
+.cv-row{display:grid;grid-template-columns:40px minmax(0,1fr);gap:8px;align-items:center;margin-bottom:8px}.cv-row-title{font-size:13px;font-weight:850;color:#5a6b85}
+.cv-cells{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px}
+.cv-cell{height:96px;display:flex;flex-direction:column;border-radius:12px;background:#fff;border:2px solid var(--line);padding:4px;overflow:hidden;transition:background .12s,opacity .2s}
+.cv-parts{flex:1;min-height:0;display:flex;flex-direction:column;gap:3px}.cv-part{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:8px;padding:0 2px;overflow:hidden;transition:background .1s}
+.cv-parts.n2 .cv-part,.cv-parts.n4 .cv-part{background:#f2f6fc}.cv-part b{font-size:24px;line-height:1.1;max-width:100%}.cv-parts.n2 .cv-part b{font-size:17px}.cv-parts.n4 .cv-part b{font-size:12px}.cv-label{font-size:10px;color:var(--muted);max-width:100%}
+.cv-ticks{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;margin-top:4px;height:8px;flex:none}.cv-ticks i{border-radius:3px;background:#e6ebf2}
+.cv-cell.done{opacity:.5}.cv-cell.playing{border-color:#eaa820;background:#fff6d6;box-shadow:0 0 0 3px #ffe29a}.cv-cell.playing .cv-ticks i.on{background:#f0a500}.cv-part.active{background:#ffd76a!important}
+@media(max-width:600px){.cv-row{grid-template-columns:1fr}.cv-row-title{font-size:12px}.cv-cells{gap:3px}.cv-cell{height:78px;padding:3px}.song-pick-row{grid-template-columns:1fr}.song-bar .beat{height:96px}}
+/* 선생님 · 반별 수업용 노래 */
+.song-library{margin:22px 0;padding:18px;border:1px solid var(--line);border-radius:18px;background:#f7faff}.song-library h3{margin:0;font-size:18px}.song-library .section-heading{margin-bottom:6px}.song-library .text-button{font-size:13px;text-decoration:none}
+.song-upload-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin:12px 0 4px}.song-upload-row input[type=file]{padding:10px;background:#fff}
+.song-library-list{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px}.song-library-empty{color:var(--muted);font-size:14px;padding:10px 2px}
+.song-library-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px}.song-library-info strong{display:block;overflow-wrap:anywhere}.song-library-info small{color:var(--muted);font-size:12px}
+.song-library-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}.song-library-actions button{min-height:42px;padding:6px 12px;border-radius:10px;font-size:13px}.song-bpm{display:flex;align-items:center;gap:6px;margin:0;font-size:12px;color:var(--muted)}.song-bpm input{width:92px;min-height:42px;padding:6px 8px}.song-remove{background:#fff0f1;color:#bb3548}
+.music-wall-title{font-size:17px;margin:24px 0 10px}.music-note[role=button]{cursor:pointer}.music-note[role=button]:hover{border-color:var(--brand)}.present-open{width:100%;margin-top:10px;min-height:46px}
+@media(max-width:700px){.song-library-item{grid-template-columns:1fr}.song-library-actions{justify-content:flex-start}.song-upload-row{grid-template-columns:1fr}}
+/* 선생님 · 조별 발표 화면 */
+body.presenting-music{overflow:hidden}
+.present-stage{position:fixed;inset:0;z-index:50;background:#fffdf6;display:flex;flex-direction:column;padding:18px 24px 20px;gap:10px}
+.present-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}.present-titles h2{margin:0;font-size:clamp(26px,3.4vw,44px);letter-spacing:-.03em}.present-titles p{margin:4px 0 0;color:#5a6b85;font-weight:700;font-size:clamp(14px,1.5vw,20px)}
+.present-controls{display:flex;gap:8px;flex-wrap:wrap}.present-controls button{min-height:52px;padding:10px 18px;border-radius:14px;font-weight:800}
+.present-status{margin:0;min-height:1.5em;font-weight:800;color:#8b5c0a;font-size:clamp(15px,1.6vw,22px)}
+.present-board{flex:1;max-height:none;margin:0}.present-board .cv-cell{height:clamp(96px,14vh,150px)}.present-board .cv-part b{font-size:clamp(22px,2.8vw,40px)}.present-board .cv-parts.n2 .cv-part b{font-size:clamp(16px,2vw,28px)}.present-board .cv-parts.n4 .cv-part b{font-size:clamp(12px,1.3vw,18px)}.present-board .cv-ticks{height:12px}.present-board .cv-row-title{font-size:16px}.present-board .cv-label{font-size:clamp(10px,1vw,14px)}
+.present-countdown{position:absolute;inset:0;display:grid;place-items:center;background:#14223c99;color:#fff;font-size:min(30vw,220px);font-weight:900;pointer-events:none}

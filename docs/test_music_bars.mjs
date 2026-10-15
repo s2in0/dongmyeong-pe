@@ -20,3 +20,12 @@ assert.throws(()=>context.musicSubmit_({},{...body,choreography:{palette:[A],bar
 assert.throws(()=>context.musicSubmit_({},{...body,bpm:0}));
 const summary=context.classMusicSummary_([Array.from(context.MUSIC_HEAD),row],2)[0];assert.equal(summary.choreography.bars.length,50);assert.match(context.choreographyLabel_(summary.choreography),/1줄: ○ ↔ ✕ ○ ↔ ✕ ○ ↔/);
 console.log('Folded bars passed: legacy migration, exact partial beats, compact 400/4096-beat songs, server index validation and class history.');
+{const {packBars,unpackBars,splitCell,cellFilled,normalizeCell}=await import('./music_bars.js');
+ const a={symbol:'o',label:'a'},b={symbol:'sc',label:'b'};
+ const bars=[[{split:2,parts:[a,b]},{split:4,parts:[b,a,b,a]},a,a,a,a,a,a]],packed=packBars(bars);
+ assert.deepEqual(packed.bars[0].slice(0,3),[[0,1],[1,0,1,0],0]);
+ assert.deepEqual(unpackBars(packed),bars,'나뉜 칸이 그대로 복원됨');
+ assert.deepEqual(splitCell(a,4),{split:4,parts:[a,null,null,null]});assert.equal(splitCell({split:2,parts:[null,b]},1),b);
+ assert.equal(cellFilled({split:2,parts:[a,null]}),false);assert.throws(()=>packBars([[{split:2,parts:[a,null]},a,a,a,a,a,a,a]]),/빈 칸/);
+ assert.equal(normalizeCell({split:3,parts:[a,a,a]},x=>x),null);
+ console.log('Split packing passed.');}
