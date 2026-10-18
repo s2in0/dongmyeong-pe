@@ -30,6 +30,7 @@ function doPost(e) {
     if(d.type==='studentSettings')return out_(studentSettingsMemo_(d));
     if(d.type==='record')return out_(stageRecord_(d));
     if(d.type==='recordProgress')return out_(stageProgress_(d));
+    if(d.type==='flushRecords')return out_(flushRecords_(null));
     if(d.type==='studentLive')return out_(liveData_(null,d,false));
     if(d.type==='teacherLive'){if(!authorized_(d.pin))return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});return out_(liveData_(null,d,true));}
     if(d.type==='musicLibrary'||d.type==='musicLibraryAudio'){var lg=integer_(d.grade,1,6),lc=integer_(d.classNo,1,30);validStudentNumber_(lg,lc,d.number);if(!classRoster_(lg,lc))throw Error('수업용 노래 대상 반이 아닙니다.');return out_(d.type==='musicLibrary'?musicLibrary_(lg,lc):musicLibraryAudio_(d,lg,lc));}
@@ -59,7 +60,6 @@ function doPost(e) {
     if(d.type==='saveSettings'){if(!authorized_(d.pin))return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});return out_(saveClassSettings_(ss,d));}
     if(d.type==='teacherSettings'||d.type==='refreshClassSheets'){if(!authorized_(d.pin))return out_({ok:false,error:'교사 PIN이 올바르지 않습니다.'});return out_(d.type==='teacherSettings'?readClassSettings_(ss,d):refreshClassSheets_(ss));}
     if(d.type==='studentSettings')return out_(readClassSettings_(ss,d));
-    if(d.type==='flushRecords')return out_(flushRecords_(ss));
     return out_({ok:false,error:'알 수 없는 요청'});
   } catch(err) { return out_({ok:false,error:String(err.message || err)}); }
 }
@@ -345,11 +345,11 @@ function stageProgress_(d){
  if(d.cancelled){if(old&&old.id===id){old.cancelled=true;old.seq=seq;var cancelledPut={};cancelledPut[key]=JSON.stringify(old);cache.putAll(cancelledPut,120);}return {ok:true};}if(old&&old.id===id&&old.cancelled)return {ok:true,ignored:true};
  var continuing=old&&old.id===id;if(!continuing&&!current.settings.activityOpen)return {ok:true,ignored:true};
  var serverStart=continuing?old.serverStart:now;if(now>serverStart+lesson.settings.durationSeconds*1000+20000)return {ok:true,ignored:true};if(continuing&&count<old.count)return {ok:true,ignored:true};
- var value={id:id,seq:seq,number:n,count:count,sessionId:session,attemptStartedAt:started,serverStart:serverStart,updatedAt:now,durationSeconds:lesson.settings.durationSeconds,elapsedSeconds:elapsed},put={};put[key]=JSON.stringify(value);cache.putAll(put,120);return {ok:true};
+ var value={id:id,seq:seq,number:n,count:count,sessionId:session,attemptStartedAt:started,serverStart:serverStart,updatedAt:now,durationSeconds:lesson.settings.durationSeconds,elapsedSeconds:elapsed,deliveryState:d.deliveryState==='sending'?'sending':'measuring'},put={};put[key]=JSON.stringify(value);cache.putAll(put,600);return {ok:true};
 }
 function liveProgress_(data,g,c){
  var roster=classRoster_(g,c),max=roster?roster.maxNumber:99,keys=[];for(var n=1;n<=max;n++)keys.push('jumpy_progress_'+g+'_'+c+'_'+n);var values=CacheService.getScriptCache().getAll(keys),done={};data.rows.forEach(function(row){done[row.id]=true;});
- return keys.filter(function(key){return values[key];}).map(function(key){return JSON.parse(values[key]);}).filter(function(row){return !row.cancelled&&row.sessionId===(data.sessionId||data.lessonId)&&!done[row.id]&&Date.now()<=row.serverStart+row.durationSeconds*1000+20000;}).map(function(row){return {number:row.number,count:row.count,elapsedSeconds:row.elapsedSeconds,stale:Date.now()-row.updatedAt>8000};});
+ return keys.filter(function(key){return values[key];}).map(function(key){return JSON.parse(values[key]);}).filter(function(row){return !row.cancelled&&row.sessionId===(data.sessionId||data.lessonId)&&!done[row.id]&&Date.now()<=row.serverStart+row.durationSeconds*1000+600000;}).map(function(row){return {number:row.number,count:row.count,elapsedSeconds:row.elapsedSeconds,stale:Date.now()-row.updatedAt>8000,deliveryState:row.deliveryState==='sending'||Date.now()>=row.serverStart+row.durationSeconds*1000?'sending':'measuring'};});
 }
 function recordFromRow_(r){return {id:String(r[0]),createdAt:r[1] instanceof Date?r[1].toISOString():String(r[1]),grade:Number(r[2]),classNo:Number(r[3]),number:Number(r[4]),count:Number(r[5]),durationSeconds:Number(r[6]),countdownSeconds:Number(r[7]),sensitivity:String(r[8]),misses:Number(r[9]),bestStreak:Number(r[10]),lessonId:String(r[11]||''),sessionId:String(r[14]||r[11]||''),settingsSnapshot:jsonSnapshot_(r[12]),activityType:'rope'};}
 function cachedRecordBase_(values,lessonId){
@@ -398,7 +398,7 @@ function stageRecord_(d){
  try{
   var props=PropertiesService.getScriptProperties(),values=props.getProperties(),pending=pendingRecords_(values),base=cachedRecordBase_(values,sessionId);if(!base)throw Error('기록 연결을 다시 준비 중입니다.');
   var all=base.concat(pending.map(function(item){return recordFromRow_(item.row);})),old=all.find(function(r){return r.id===id;});
-  if(old){if(old.grade!==g||old.classNo!==c||old.number!==n||old.count!==count||old.lessonId!==lesson.id)throw Error('중복 기록 ID');return {ok:true,duplicate:true,queued:!!values['JUMPY_PENDING_RECORD_'+id],createdAt:old.createdAt,lessonId:lesson.id};}
+  if(old){if(old.grade!==g||old.classNo!==c||old.number!==n||old.count!==count||old.lessonId!==lesson.id)throw Error('중복 기록 ID');return {ok:true,duplicate:true,queued:!!values['JUMPY_PENDING_RECORD_'+id],shouldFlush:!!values['JUMPY_PENDING_RECORD_'+id]&&claimRecordFlush_(),createdAt:old.createdAt,lessonId:lesson.id};}
   if(!s.activityOpen)throw Error('측정을 시작한 수업의 활동이 닫혔습니다.');
   var seen={},attempts=0;all.forEach(function(r){if(r.grade===g&&r.classNo===c&&r.number===n&&(r.sessionId||r.lessonId)===sessionId&&!seen[r.id]){seen[r.id]=true;attempts++;}});
   if(attempts>=1+(s.retryAllowed?s.retryLimit:0))throw Error('재도전 횟수를 모두 사용했습니다.');
@@ -406,14 +406,15 @@ function stageRecord_(d){
   var row=[id,created.toISOString(),g,c,n,count,duration,s.countdownSeconds,s.sensitivity,misses,streak,lesson.id,JSON.stringify(s),'',sessionId],json=JSON.stringify(row);
   var total=Object.keys(values).reduce(function(sum,key){return sum+byteLength_(key)+byteLength_(values[key]);},0);if(total+byteLength_(json)>440000||pending.length>=120)throw Error('기록 저장을 정리 중입니다. 이 기기의 기록은 보관하고 자동으로 다시 전송합니다.');
   if(byteLength_(json)>8000)throw Error('기록 설정 크기를 확인해 주세요.');props.setProperty('JUMPY_PENDING_RECORD_'+id,json);var liveKey='JUMPY_LIVE_LESSON_'+g+'_'+c,live=jsonSnapshot_(props.getProperty(liveKey));if(live&&(live.sessionId||live.id)===sessionId){live.expiresAt=Date.now()+86400000;props.setProperty(liveKey,JSON.stringify(live));}invalidateLiveClass_(g,c);
-  return {ok:true,queued:true,createdAt:row[1],lessonId:lesson.id,sessionId:sessionId};
+  return {ok:true,queued:true,shouldFlush:claimRecordFlush_(),createdAt:row[1],lessonId:lesson.id,sessionId:sessionId};
  }finally{lock.releaseLock();}
 }
+function claimRecordFlush_(){var cache=CacheService.getScriptCache(),key='jumpy_record_flush_lease';if(cache.getAll([key])[key])return false;var put={};put[key]='1';cache.putAll(put,12);return true;}
 function flushRecords_(ss){
  var lock=LockService.getUserLock();if(!lock.tryLock(0))return {ok:true,busy:true};
  try{
   var props=PropertiesService.getScriptProperties(),pending=pendingRecords_(props.getProperties()).slice(0,60);if(!pending.length)return {ok:true,written:0,pending:0};
-  var sh=sheet_(ss,RECORDS,HEAD),source=sh.getDataRange().getValues(),ids={},lessons={},accepted=[];source.slice(1).forEach(function(r){ids[String(r[0])]=r;});
+  ss=ss||SpreadsheetApp.getActiveSpreadsheet();var sh=sheet_(ss,RECORDS,HEAD),source=sh.getDataRange().getValues(),ids={},lessons={},accepted=[];source.slice(1).forEach(function(r){ids[String(r[0])]=r;});
   pending.forEach(function(item){var row=item.row,old=ids[row[0]];if(old&&(Number(old[2])!==row[2]||Number(old[3])!==row[3]||Number(old[4])!==row[4]))throw Error('기록 ID 충돌: 원본을 보존합니다.');if(!old){accepted.push(row);ids[row[0]]=row;}lessons[row[14]||row[11]]={grade:row[2],classNo:row[3]};});
   accepted.sort(function(a,b){return String(a[1]).localeCompare(String(b[1]));});
   if(accepted.length){var start=sh.getLastRow()+1,end=start+accepted.length-1;if(sh.getMaxRows()<end)sh.insertRowsAfter(sh.getMaxRows(),end-sh.getMaxRows());sh.getRange(start,1,accepted.length,HEAD.length).setValues(accepted);SpreadsheetApp.flush();}
