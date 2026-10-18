@@ -28,8 +28,8 @@ function read(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch{ret
 let state=Object.assign({url:DEFAULT_SHEET_URL,identity:null,settings:defaults,musicSettings:{activityOpen:true},medals:defaultMedals,moveOptions:defaultMoves,records:[],outbox:[],deliveryMeta:{}},read());
 // Shared classroom devices always start at the student entry screen.
 state.identity=null;state.ranking=null;
-const pendingRecords=createPendingRecords(localStorage);state.outbox=pendingRecords.restore(state.outbox);
-function store(){state.outbox=pendingRecords.restore(state.outbox);try{localStorage.setItem(KEY,JSON.stringify(state));}catch{/* Per-record pending keys and memory keep the finish available for sending. */}}
+const pendingRecords=createPendingRecords({getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value),removeItem:key=>localStorage.removeItem(key),key:i=>localStorage.key(i),get length(){return localStorage.length;}});state.outbox=pendingRecords.restore(state.outbox);
+function store(){state.outbox=pendingRecords.restore(state.outbox);state.records=[...new Map([...state.records,...state.outbox].map(record=>[record.id,record])).values()];try{localStorage.setItem(KEY,JSON.stringify(state));}catch{/* Per-record pending keys and memory keep the finish available for sending. */}}
 const qs=new URLSearchParams(location.search);if(qs.get('sheet')&&/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(qs.get('sheet'))){state.url=qs.get('sheet');store()}
 const qrClass=studentClass(location.search);if(qrClass){$('grade').value=qrClass.grade;$('classNo').value=qrClass.classNo;$('number').value='';}
 function updateEntryRoster(){const roster=classRoster(Number($('grade').value),Number($('classNo').value));$('number').max=roster?roster.maxNumber:99;$('number').placeholder=roster?`1~${roster.maxNumber}번`:'번호';}
