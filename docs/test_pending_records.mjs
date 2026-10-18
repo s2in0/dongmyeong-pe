@@ -1,0 +1,7 @@
+import assert from 'node:assert/strict';
+import {createPendingRecords} from './pending_records.js';
+const values=new Map(),storage={get length(){return values.size},key:i=>[...values.keys()][i],getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
+const first=createPendingRecords(storage),second=createPendingRecords(storage),one={id:'record-1',count:30},two={id:'record-2',count:40};
+first.restore([one]);second.restore([two]);assert.deepEqual(first.restore([one]).map(r=>r.id).sort(),['record-1','record-2'],'A stale tab cannot erase a newer queued record');second.acknowledge(one.id);assert.deepEqual(first.restore([one,two]).map(r=>r.id),['record-2'],'Old snapshots cannot resurrect an acknowledged record');assert.deepEqual(createPendingRecords(storage).restore([]),[two],'Reload preserves the unsent record');values.set('jumpy_record_pending_corrupt','broken');assert.deepEqual(first.restore([]),[two]);
+const unavailable=createPendingRecords({get length(){throw Error('Storage blocked')},getItem(){throw Error('Storage blocked')},setItem(){throw Error('Storage blocked')}});assert.deepEqual(unavailable.restore([one]),[one],'Storage errors retain the in-memory result for immediate transmission');assert.equal(unavailable.healthy,false);
+console.log('Pending storage passed: independent record durability, legacy migration, stale/multiple tabs, acknowledged IDs, corrupt entries and blocked storage.');
