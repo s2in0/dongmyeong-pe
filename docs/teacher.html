@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>JUMPY 교사 화면</title>
-  <link rel="stylesheet" href="style.css?v=40">
+  <link rel="stylesheet" href="style.css?v=41">
 </head>
 <body class="teacher-app">
 <main class="teacher-shell">
@@ -71,10 +71,10 @@
         </section>
         <section id="rankingCard" class="teacher-pane hidden">
           <div class="pane-heading"><div><span class="eyebrow">CLASS RANKING</span><h2>우리 반 순위</h2><p id="rankRule" class="subtle"></p></div><button id="rankFullscreen" class="secondary presentation-button">⛶ 전체화면</button></div>
-          <div class="ranking-actions"><span id="rankLiveStatus" class="ranking-live-label" role="status">실시간 순위</span><button id="showFinalRanking" type="button" class="primary" disabled>최종 순위 발표</button></div>
+          <div class="ranking-actions"><span id="rankLiveStatus" class="ranking-live-label" role="status">실시간 순위</span><button id="showFinalRanking" type="button" class="primary" disabled>성장왕 3·2·1등 발표</button></div>
           <p id="rankParticipation" class="subtle" role="status"></p>
           <div id="rankLiveBoard"><div id="rankPodium" class="rank-podium"></div><ol id="classRanking" class="rank-list"></ol></div>
-          <div id="rankFinalStage" class="final-ranking hidden"><div class="final-ranking-heading"><span class="eyebrow">FINAL RANKING</span><h3 id="finalRankTitle" aria-live="polite">최종 순위</h3><p id="finalRankRule" class="subtle"></p></div><div class="final-podium-stage"><div id="finalRankCountdown" class="final-rank-countdown hidden" aria-hidden="true"></div><div id="finalRankPodium" class="rank-podium final-podium"></div></div><div class="final-ranking-actions"><button id="replayFinalRanking" type="button" class="secondary">다시 발표</button><button id="backToLiveRanking" type="button" class="primary">실시간 순위로</button></div></div>
+          <div id="rankFinalStage" class="final-ranking hidden"><div class="final-ranking-heading"><span class="eyebrow">FINAL RANKING</span><h3 id="finalRankTitle" aria-live="polite">최종 순위</h3><p id="finalRankRule" class="subtle"></p></div><div class="final-podium-stage"><div id="finalRankCountdown" class="final-rank-countdown hidden" aria-hidden="true"></div><div id="finalRankPodium" class="rank-podium final-podium"></div></div><div class="final-ranking-actions"><button id="showAllImprovement" type="button" class="primary" disabled>전체 향상 순위 보기</button><button id="replayFinalRanking" type="button" class="secondary">다시 발표</button><button id="backToLiveRanking" type="button" class="primary">실시간 순위로</button></div><div id="growthAll" class="hidden"><h3>지난 기록보다 많이 늘어난 순서</h3><p class="subtle">같은 제한시간의 이전 수업 최근 기록과 비교해요. 같은 향상 횟수는 공동 순위, 첫 기록은 순위 없이 표시해요.</p><div class="record-table-wrap"><table class="teacher-table"><thead><tr><th>향상 순위</th><th>번호</th><th>이전</th><th>이번</th><th>변화</th></tr></thead><tbody id="growthAllRows"></tbody></table></div></div></div>
         </section>
         <section id="recordsCard" class="teacher-pane hidden">
           <div class="pane-heading"><div><span class="eyebrow">CLASS RECORDS</span><h2>반별 기록</h2><p id="recordClassSettings" class="subtle"></p></div><button id="downloadRecords" type="button" class="secondary">CSV 내려받기</button></div>
@@ -101,6 +101,6 @@
   <p id="studentQrStatus" class="status-line" role="status"></p>
   <details class="qr-link-details"><summary>접속 링크 보기</summary><a id="studentQrLink" target="_blank" rel="noopener"></a></details>
 </dialog>
-<script type="module" src="teacher.js?v=40"></script>
+<script type="module" src="teacher.js?v=41"></script>
 </body>
 </html>
