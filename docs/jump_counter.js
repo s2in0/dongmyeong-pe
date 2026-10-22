@@ -232,7 +232,7 @@
         const left = b[3] - a[3], right = b[4] - a[4];
         if (this.requireFeet) {
           const hipRise = b[2] - a[2], headRise = b[1] - a[1];
-          if(this.supportSignal)return Math.max(left,right)>=this.feetLift*this._scale&&hipRise>=0&&headRise>=0?null:"feet";
+          if(this.supportSignal)return Math.max(left,right)>=this.feetLift*this._scale&&hipRise>=-.25*bodyRise&&headRise>=-.25*bodyRise?null:"feet";
           // Alternating/boxer steps lift the support foot while the other foot lowers.
           // Still require visible feet AND coherent head/hip rise; a knee lift alone is insufficient.
           const footRise=this.feetMode === "support" ? Math.max(left,right) : Math.min(left,right);
@@ -371,9 +371,9 @@
       const reference=this.body._refPeriod(),fast=reference!==null&&reference<.45&&t-this.body.events[this.body.events.length-1].t<1;
       Object.assign(this.body,{threshold:this.baseThreshold*(fast ? .67 : 1),smoothing:fast ? .85 : .7,minInterval:fast ? .15 : .18,coherence:fast ? .15 : .35,feetLift:fast ? .004 : .008});
       const body=this.body.update(t,sig),feet=this.support.update(t,sig?{...sig,centerY:Math.max(...(sig.supportY||sig.feetY))}:null);
-      const period=this.body._refPeriod(),merge=Math.max(.16,Math.min(.4,(period||.4)*.49));
-      const accepted=[];
-      const supportPeriod=this.support._refPeriod();
+      const period=this.body._refPeriod(),supportPeriod=this.support._refPeriod();
+      const mergePeriod=supportPeriod!==null&&supportPeriod<=.38?Math.min(period||supportPeriod,supportPeriod):(period||.4);
+      const merge=Math.max(.13,Math.min(.4,mergePeriod*.49)),accepted=[];
       for(const cand of [...body.map(e=>({...e,source:'body'})),...feet.map(e=>({...e,source:'support'}))].sort((a,b)=>a.t-b.t)){
         if(cand.source==='support'&&(!supportPeriod||supportPeriod>.38))continue;
         if(this.events.some(e=>Math.abs(e.t-cand.t)<merge)||this.pending.some(e=>Math.abs(e.t-cand.t)<merge))continue;

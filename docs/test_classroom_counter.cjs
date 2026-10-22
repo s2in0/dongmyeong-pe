@@ -44,3 +44,12 @@ for(const fps of [15,24,30,60])for(const alternating of [false,true]){
  assert.equal(low.count,12,`Almost stationary torso with ${alternating?'alternating':'two-foot'} hops at ${fps} FPS`);
 }
 console.log('Support-foot regression: 250/min low two-foot and alternating hops with near-stationary torso, 15/24/30/60 FPS.');
+
+for(const fps of [15,24,30,60]){
+ const paired=createClassroomCounter('보통'),period=.24;
+ for(let i=0;i<4*fps;i++){const t=i/fps,n=Math.floor(t/period),phase=t%period;
+ const lift=n<12?.004*Math.sin(Math.PI*Math.min(phase/.19,1)):0;
+ const body=n<12&&n%2===0?lift*2:0;
+ paired.update(t,measurementSignal(pose(body,[lift,lift]),W,H));}
+ assert.equal(paired.count,12,`Body seen on every other hop must not suppress real foot hops at ${fps} FPS`);
+}

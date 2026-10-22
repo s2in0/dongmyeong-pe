@@ -1,4 +1,4 @@
-import {improvementRanking,liveChartRows,rankingPhase} from './growth_ranking.js?v=43';
+import {improvementRanking,liveChartRows,rankingPhase} from './growth_ranking.js?v=44';
 import {classRoster,ropeParticipation} from './class_roster.js?v=35';
 import {unpackBars,countBeats} from './music_bars.js?v=40';
 import {totalBeats,estimatedTime} from './music_sequence.js?v=28';
