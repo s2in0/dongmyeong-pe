@@ -34,3 +34,13 @@ assert.equal(measurementSignal(null,W,H),null);
 const croppedHead=pose(.008,[.008,.008]);for(const i of [0,7,8])croppedHead[i].y=-.1;
 assert.equal(measurementSignal(croppedHead,W,H),null,'Hidden head must produce a framing prompt, not endless rhythm waiting.');
 console.log('Classroom counter passed: low and alternating hops at 15/24/30/60 FPS, moving-foot confidence, no planted-foot/shrug/knee/walking/jitter/hidden-feet counts, camera-gap reset.');
+
+for(const fps of [15,24,30,60])for(const alternating of [false,true]){
+ const low=createClassroomCounter('보통'),period=.24;
+ for(let i=0;i<4*fps;i++){const t=i/fps,n=Math.floor(t/period),phase=t%period;const lift=n<12?.004*Math.sin(Math.PI*Math.min(phase/.19,1)):0;
+ const swing=n<12?.014*Math.sin(Math.PI*Math.min(phase/.19,1)):0;
+ const feet=alternating?(n%2?[lift+swing,lift]:[lift,lift+swing]):[lift,lift];
+ low.update(t,measurementSignal(pose(lift*.08,feet),W,H));}
+ assert.equal(low.count,12,`Almost stationary torso with ${alternating?'alternating':'two-foot'} hops at ${fps} FPS`);
+}
+console.log('Support-foot regression: 250/min low two-foot and alternating hops with near-stationary torso, 15/24/30/60 FPS.');

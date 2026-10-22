@@ -1,4 +1,4 @@
-import {improvementRanking,liveChartRows} from './growth_ranking.js?v=41';
+import {improvementRanking,liveChartRows,rankingPhase} from './growth_ranking.js?v=43';
 import {classRoster,ropeParticipation} from './class_roster.js?v=35';
 import {unpackBars,countBeats} from './music_bars.js?v=40';
 import {totalBeats,estimatedTime} from './music_sequence.js?v=28';
@@ -54,9 +54,13 @@ function renderRanking(rows,settings,lessonId='',progress=[]){
   const roster=classRoster(Number($('tGrade').value),Number($('tClass').value)),participation=ropeParticipation(rows,roster);$('rankParticipation').textContent=participation?`전체 ${participation.total}명 · 기록 완료 ${participation.completed}명 · 미완료 ${participation.missing.length}명${participation.missing.length?' · 아직 기록 없는 번호: '+participation.missing.map(n=>n+'번').join(', '):' · 모두 기록했어요'}`:'';
   const scope=`${$('tGrade').value}-${$('tClass').value}-${settings.recordMode}-${lessonId}`;
   latestRanking=rows.map(row=>({...row}));rankingSettings={...settings};rankingScope=scope;
+  const phase=rankingPhase(rows,progress,settings,roster);if(phase==='live'&&rankFinalMode)leaveFinalRanking();
+  chartRanking=phase==='live'?chartRanking:liveChartRows(rows,[],roster?.maxNumber||0);
+  $('rankBoardTitle').textContent=phase==='live'?'지금 뛰고 있는 횟수':'오늘 줄넘기 기록';
+  $('finishRopeActivity').disabled=settings.activityOpen===false||classWritePending;
   $('rankRule').textContent=`이번 수업 · ${settings.recordMode==='latest'?'마지막 기록':'최고기록'} 반영 · 마지막 기록 후 24시간 유지`;
-  if(!rankFinalMode){const sending=progress.filter(row=>row.deliveryState==='sending').length;$('rankLiveStatus').textContent=`측정 중 ${progress.length-sending}명 · 결과 전송 대기 ${sending}명 · 기록 확정 ${rows.length}명`;}
-  $('showFinalRanking').disabled=!rows.length;renderLivePodium(chartRanking.filter(r=>!r.waiting),scope);
+  if(!rankFinalMode){const sending=progress.filter(row=>row.deliveryState==='sending').length;$('rankLiveStatus').textContent=phase==='today'?`오늘 기록 · ${rows.length}명 확정${progress.length?' · 아직 뛰거나 전송 중인 기록은 도착하면 반영돼요':''}`:`측정 중 ${progress.length-sending}명 · 결과 전송 대기 ${sending}명 · 기록 확정 ${rows.length}명`;}
+  $('showFinalRanking').disabled=!rows.length||phase!=='today';renderLivePodium(chartRanking.filter(r=>!r.waiting),scope);
   if(rankFinalMode&&finalSnapshot)refreshImprovementSnapshot();
   if(!chartRanking.length){rankingMotion.reset();$('classRanking').append(element('li','board-empty','아직 기록이 없어요.'));return}
   if($('classRanking').querySelector('.board-empty'))$('classRanking').replaceChildren();rankingMotion.render(chartRanking,{key:scope});
@@ -77,11 +81,11 @@ function drawGrowthPodium(revealAll=false){
  });
 }
 function playFinalRanking(){
- if(!finalSnapshot)return;cancelFinalTimers();rankFinalMode=true;finalSnapshot.revealed=false;refreshImprovementSnapshot();$('rankLiveBoard').classList.add('hidden');$('rankFinalStage').classList.remove('hidden');$('showFinalRanking').classList.add('hidden');$('growthAll').classList.add('hidden');$('showAllImprovement').disabled=true;$('rankLiveStatus').textContent='지난 기록 대비 향상 순위 발표';$('rankLiveStatus').classList.add('ranking-paused');
+ if(!finalSnapshot)return;cancelFinalTimers();rankFinalMode=true;finalSnapshot.revealed=false;refreshImprovementSnapshot();$('rankLiveBoard').classList.add('hidden');$('rankFinalStage').classList.remove('hidden');$('showFinalRanking').classList.add('hidden');$('growthAll').classList.add('hidden');$('showAllImprovement').disabled=true;$('rankLiveStatus').textContent='이전 최고기록 대비 향상 순위 발표';$('rankLiveStatus').classList.add('ranking-paused');
  const still=reducedMotion(),countdown=$('finalRankCountdown');$('finalRankTitle').textContent='우리 반 성장왕을 발표합니다';$('finalRankRule').textContent=finalSnapshot.rule;const cards=drawGrowthPodium();countdown.classList.toggle('hidden',still||!cards.length);
- if(!cards.length){finalSnapshot.revealed=true;$('finalRankTitle').textContent='모두의 도전을 확인해요';$('finalRankRule').textContent=finalSnapshot.rows.some(r=>r.delta!==null)?'지난 기록보다 늘어난 학생이 아직 없어요. 전체 비교에서 이번 도전을 확인할 수 있어요.':'비교할 이전 기록이 없어요. 이번 기록을 다음 수업의 성장 기준으로 사용해요.';$('showAllImprovement').disabled=false;return;}
+ if(!cards.length){finalSnapshot.revealed=true;$('finalRankTitle').textContent='모두의 도전을 확인해요';$('finalRankRule').textContent=finalSnapshot.rows.some(r=>r.delta!==null)?'이전 최고기록보다 늘어난 학생이 아직 없어요. 전체 비교에서 이번 도전을 확인할 수 있어요.':'비교할 이전 기록이 없어요. 이번 기록을 다음 수업의 성장 기준으로 사용해요.';$('showAllImprovement').disabled=false;return;}
  if(!still){const tick=n=>{countdown.textContent=n;};tick(3);finalTimers.push(setTimeout(()=>tick(2),1000),setTimeout(()=>tick(1),2000),setTimeout(()=>countdown.classList.add('hidden'),3000));}
- cards.forEach(({card,group},index)=>{const reveal=()=>{card.classList.add('winner-revealed');card.setAttribute('aria-hidden','false');$('finalRankTitle').textContent=`${group.rank}등 · 지난 기록보다 +${group.count}회!`;if(!still){card.animate?.([{opacity:0,transform:'translateY(70px) scale(.85)'},{opacity:1,transform:'translateY(0) scale(1)'}],{duration:700,easing:'ease-out'});if(group.rank===1)winnerBurst(card);}if(index===cards.length-1){finalSnapshot.revealed=true;$('finalRankTitle').textContent='우리 반 성장왕';$('showAllImprovement').disabled=false;updateFinalWinners();}};if(still)reveal();else finalTimers.push(setTimeout(reveal,3300+index*1600));});
+ cards.forEach(({card,group},index)=>{const reveal=()=>{card.classList.add('winner-revealed');card.setAttribute('aria-hidden','false');$('finalRankTitle').textContent=`${group.rank}등 · 이전 최고기록보다 +${group.count}회!`;if(!still){card.animate?.([{opacity:0,transform:'translateY(70px) scale(.85)'},{opacity:1,transform:'translateY(0) scale(1)'}],{duration:700,easing:'ease-out'});if(group.rank===1)winnerBurst(card);}if(index===cards.length-1){finalSnapshot.revealed=true;$('finalRankTitle').textContent='우리 반 성장왕';$('showAllImprovement').disabled=false;updateFinalWinners();}};if(still)reveal();else finalTimers.push(setTimeout(reveal,3300+index*1600));});
 }
 function updateFinalWinners(){if(!rankFinalMode||!finalSnapshot?.revealed||finalSnapshot.podiumSignature===JSON.stringify(finalSnapshot.rows))return;drawGrowthPodium(true);}
 function renderAllImprovement(){
@@ -89,7 +93,8 @@ function renderAllImprovement(){
 }
 $('showAllImprovement').onclick=()=>{if(!finalSnapshot?.revealed)return;refreshImprovementSnapshot();renderAllImprovement();$('growthAll').classList.remove('hidden');$('growthAll').scrollIntoView({behavior:reducedMotion()?'instant':'smooth',block:'start'});};
 function winnerBurst(card){const burst=element('span','winner-burst');burst.setAttribute('aria-hidden','true');for(let index=0;index<16;index++){const piece=element('i');piece.style.setProperty('--burst-angle',`${index*22.5}deg`);piece.style.setProperty('--burst-delay',`${index%4*25}ms`);burst.append(piece)}card.append(burst);finalTimers.push(setTimeout(()=>burst.remove(),1600))}
-$('showFinalRanking').onclick=async()=>{if(!latestRanking.length)return;$('showFinalRanking').disabled=true;try{const data=await refreshTeacherLive();if(!data||$('rankingCard').classList.contains('hidden'))return;if(!latestRanking.length){$('rankLiveStatus').textContent='발표할 기록이 없어요.';return}finalSnapshot={rows:[],sessionId:data.sessionId||data.lessonId,scope:rankingScope,rule:`${$('classTitle').textContent} · 같은 ${rankingSettings.durationSeconds}초 · 이전 수업의 최근 기록 대비 늘어난 횟수 · 첫 기록은 따로 표시`};playFinalRanking()}catch(error){$('rankLiveStatus').textContent=`순위 확인 실패: ${error.message}`}finally{$('showFinalRanking').disabled=!latestRanking.length}};
+$('showFinalRanking').onclick=async()=>{if(!latestRanking.length)return;$('showFinalRanking').disabled=true;try{const data=await refreshTeacherLive();if(!data||$('rankingCard').classList.contains('hidden'))return;if(!latestRanking.length){$('rankLiveStatus').textContent='발표할 기록이 없어요.';return}finalSnapshot={rows:[],sessionId:data.sessionId||data.lessonId,scope:rankingScope,rule:`${$('classTitle').textContent} · 같은 ${rankingSettings.durationSeconds}초 · 오늘 이전 최고기록 대비 늘어난 횟수 · 첫 기록은 따로 표시`};playFinalRanking()}catch(error){$('rankLiveStatus').textContent=`순위 확인 실패: ${error.message}`}finally{$('showFinalRanking').disabled=!latestRanking.length||rankingPhase(latestRanking,latestProgress,rankingSettings,classRoster(chosen().grade,chosen().classNo))!=='today'}};
+$('finishRopeActivity').onclick=async()=>{if(!rankingSettings||classWritePending)return;$('finishRopeActivity').disabled=true;const saved=await saveTeacherSettings(false,{...rankingSettings,activityOpen:false});if(saved)await refreshTeacherLive().catch(()=>{});else $('rankLiveStatus').textContent=$('saveStatus').textContent;};
 $('replayFinalRanking').onclick=playFinalRanking;$('backToLiveRanking').onclick=()=>{leaveFinalRanking();loadClass(false,true).catch(()=>{})};
 function filteredRecords(){return filterRecords(classRecords,{day:$('recordDate').value,duration:$('recordDuration').value,number:$('recordNumber').value})}
 function changeText(change){return change===null?'—':`${change>0?'+':''}${change}회`}
@@ -185,18 +190,19 @@ $('startLesson').onclick=()=>saveTeacherSettings(true).catch(e=>{$('saveStatus')
 let activeClassRead=null,pendingSettingsRequest=null,viewRefreshPending=false,lastViewRefresh=0,viewRefreshAgain=false;
 async function refreshClassViews(force=false){if(force&&viewRefreshPending){viewRefreshAgain=true;return}if(!pin||viewRefreshPending||classWritePending||!force&&Date.now()-lastViewRefresh<60000)return;viewRefreshPending=true;try{const data=await api({type:'refreshClassSheets',pin});if(data.busy){lastViewRefresh=0;return}lastViewRefresh=Date.now();$('classSheetStatus').textContent=data.sheetViewWarning||'';}catch(e){$('classSheetStatus').textContent='반별 시트 정리가 지연되고 있어요. 설정 저장과 기록 원본은 별도로 처리됩니다.';}finally{viewRefreshPending=false;if(viewRefreshAgain&&pin){viewRefreshAgain=false;refreshClassViews(true)}}}
 function setSettingsSaving(value){for(const field of $('settingsCard').querySelectorAll('input,select,button'))field.disabled=value;$('saveSettings').textContent=value?'저장 중…':'설정 저장';$('settingsCard').setAttribute('aria-busy',String(value));}
-async function saveTeacherSettings(startLesson=false){
+async function saveTeacherSettings(startLesson=false,overrideSettings=null){
  if(classWritePending)return;if($('teacherMain').inert){$('saveStatus').textContent='반 설정을 불러오는 중이에요. 표시가 끝나면 저장해 주세요.';return}
- const id=chosen(),settings=readSettings(),signature=JSON.stringify({id,settings,startLesson});
+ const id=chosen(),settings=overrideSettings||readSettings(),signature=JSON.stringify({id,settings,startLesson});
  if(!pendingSettingsRequest||pendingSettingsRequest.signature!==signature)pendingSettingsRequest={id:crypto.randomUUID(),signature};
- const requestId=pendingSettingsRequest.id;activeClassRead?.abort();loadSequence++;liveAppliedSeq=++liveReadSeq;setClassLoading(false);classWritePending=true;updateClassPicker();setSettingsSaving(true);$('saveStatus').textContent='설정을 저장하고 확인하는 중…';
+ let saved=false;const requestId=pendingSettingsRequest.id;activeClassRead?.abort();loadSequence++;liveAppliedSeq=++liveReadSeq;setClassLoading(false);classWritePending=true;updateClassPicker();setSettingsSaving(true);$('saveStatus').textContent='설정을 저장하고 확인하는 중…';
  try{
   let data;try{data=await api({type:'saveSettings',pin,...id,settings,startLesson,requestId})}catch(error){const readback=await api({type:'teacherSettings',pin,...id});if(readback.requestId!==requestId)throw error;data=readback;}
   if(data.requestId!==requestId||Object.keys(settings).some(key=>data.settings?.[key]!==settings[key]))throw Error('저장된 설정이 입력값과 다릅니다. 다시 저장해 주세요.');
-  fillSettings(data.settings);pendingSettingsRequest=null;$('saveStatus').textContent=`${startLesson?'새 수업 설정 저장 확인':'저장 확인'} · ${data.settings.durationSeconds}초 · ${data.settings.retryAllowed?'재도전 '+data.settings.retryLimit+'회':'재도전 안 함'}`;
+  fillSettings(data.settings);if(overrideSettings)renderRanking(latestRanking,data.settings,data.sessionId||data.lessonId,latestProgress);saved=true;pendingSettingsRequest=null;$('saveStatus').textContent=`${startLesson?'새 수업 설정 저장 확인':'저장 확인'} · ${data.settings.durationSeconds}초 · ${data.settings.retryAllowed?'재도전 '+data.settings.retryLimit+'회':'재도전 안 함'}`;
  }catch(e){settingsDirty=true;$('saveStatus').textContent=`저장 확인 실패: ${e.message} · 입력한 설정은 그대로 남아 있어요.`;}
  finally{classWritePending=false;setSettingsSaving(false);updateClassPicker();}
  if(pin){loadClass(false,true).catch(()=>{});refreshClassViews(true);}
+ return saved;
 }
 
 initStudentQr(chosen,()=>url);

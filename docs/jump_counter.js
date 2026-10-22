@@ -91,6 +91,7 @@
       this.lenient = !!d("lenient", false);
       this.requireFeet = !!d("requireFeet", false);
       this.feetMode = d("feetMode", "both");
+      this.supportSignal = !!d("supportSignal", false);
       this.rhythmSkipTolerance = d("rhythmSkipTolerance", 1.5);
       this.rhythmMin = this.lenient ? 1 : d("rhythmMin", 3);
       this.periodRange = d("periodRange", [0.25, 1.5]);
@@ -231,6 +232,7 @@
         const left = b[3] - a[3], right = b[4] - a[4];
         if (this.requireFeet) {
           const hipRise = b[2] - a[2], headRise = b[1] - a[1];
+          if(this.supportSignal)return Math.max(left,right)>=this.feetLift*this._scale&&hipRise>=0&&headRise>=0?null:"feet";
           // Alternating/boxer steps lift the support foot while the other foot lowers.
           // Still require visible feet AND coherent head/hip rise; a knee lift alone is insufficient.
           const footRise=this.feetMode === "support" ? Math.max(left,right) : Math.min(left,right);
@@ -351,20 +353,50 @@
     }
   }
 
-  /** Classroom profile: small bounces and alternating feet, without guessing missed jumps. */
-  function createClassroomCounter(sensitivity) {
-    return new JumpCounter({threshold:({낮음:.020,보통:.012,높음:.008})[sensitivity] ?? .012,
-      smoothing:.7,minInterval:.18,maxRiseTime:.9,feetLift:.008,coherence:.35,maxShift:.2,
-      requireFeet:true,feetMode:'support',rhythmMin:3,periodRange:[.18,1.5],
-      rhythmSkipTolerance:2.5,missCorrection:false});
+  // Follow the foot nearest the floor, rather than the average of feet moving
+  // in opposite directions. Body and support-foot observations describe one hop.
+  class ClassroomCounter extends JumpCounter {
+    constructor(sensitivity){
+      super({minInterval:.15,rhythmMin:3,periodRange:[.15,1.5],rhythmSkipTolerance:2.5,missCorrection:false});
+      const profile={threshold:({낮음:.020,보통:.012,높음:.008})[sensitivity]??.012,
+        smoothing:.7,minInterval:.18,maxRiseTime:.9,feetLift:.008,coherence:.35,maxShift:.2,
+        requireFeet:true,feetMode:'support',rhythmMin:3,periodRange:[.15,1.5],rhythmSkipTolerance:2.5,missCorrection:false};
+      this.body=new JumpCounter(profile);this.baseThreshold=profile.threshold;
+      this.support=new JumpCounter({...profile,threshold:profile.threshold*.5,smoothing:.85,minInterval:.13,periodRange:[.13,.75],feetLift:.004,coherence:.1,supportSignal:true});
+    }
+    reset(){super.reset();this.body?.reset();this.support?.reset();}
+    update(t,sig){
+      if(this.lastT!==null&&t-this.lastT>.5){this.pending=[];this.inRhythm=false;}
+      this.lastT=t;this.tracking=!!sig;
+      const reference=this.body._refPeriod(),fast=reference!==null&&reference<.45&&t-this.body.events[this.body.events.length-1].t<1;
+      Object.assign(this.body,{threshold:this.baseThreshold*(fast ? .67 : 1),smoothing:fast ? .85 : .7,minInterval:fast ? .15 : .18,coherence:fast ? .15 : .35,feetLift:fast ? .004 : .008});
+      const body=this.body.update(t,sig),feet=this.support.update(t,sig?{...sig,centerY:Math.max(...(sig.supportY||sig.feetY))}:null);
+      const period=this.body._refPeriod(),merge=Math.max(.16,Math.min(.4,(period||.4)*.49));
+      const accepted=[];
+      const supportPeriod=this.support._refPeriod();
+      for(const cand of [...body.map(e=>({...e,source:'body'})),...feet.map(e=>({...e,source:'support'}))].sort((a,b)=>a.t-b.t)){
+        if(cand.source==='support'&&(!supportPeriod||supportPeriod>.38))continue;
+        if(this.events.some(e=>Math.abs(e.t-cand.t)<merge)||this.pending.some(e=>Math.abs(e.t-cand.t)<merge))continue;
+        if(this.events.length&&cand.t<this.events[this.events.length-1].t)continue;
+        if(this.events.length&&cand.t-this.events[this.events.length-1].t>1.5)this.streak=0;
+        accepted.push(this._count(cand));
+      }
+      this.inRhythm=this.body.inRhythm||(this.support.inRhythm&&supportPeriod!==null&&supportPeriod<=.38);this._state=this.body._state;this.height=this.body.height;this.rejected=this.body.rejected;this.lastReject=this.body.lastReject;return accepted;
+    }
   }
+  function createClassroomCounter(sensitivity){return new ClassroomCounter(sensitivity);}
 
   function measurementSignal(p,width,height) {
     // Do not infer hidden or off-screen feet. A lower tracking threshold avoids discarding
     // every frame where a visible moving foot briefly drops below the ready-screen score.
-    if(!p||![11,12,23,24,27,28].every(i=>p[i]&&vis(p[i])>=.55&&p[i].x>.02&&p[i].x<.98&&p[i].y>.02&&p[i].y<.98))return null;
-    const signal=extractSignal(p,width,height,{source:'torso',feetVisibility:.55});
-    return signal&&signal.headY!==null&&signal.hipY!==null&&signal.feetY!==null?signal:null;
+    if(!p||![11,12,23,24,27,28].every(i=>p[i]&&vis(p[i])>=((i===27||i===28) ? .35 : .5)&&p[i].x>.02&&p[i].x<.98&&p[i].y>.02&&p[i].y<.98))return null;
+    const signal=extractSignal(p,width,height,{source:'torso',minVisibility:.5,feetVisibility:.35});
+    if(!signal||signal.headY===null||signal.hipY===null||signal.feetY===null)return null;
+    // Toe/heel contact is steadier than ankle angle when a skilled jumper barely
+    // leaves the floor. Archived tracks without foot-tip points keep ankle fallback.
+    signal.centerX=.25*signal.centerX+.75*(p[23].x+p[24].x)*width/2;
+    signal.supportY=[0,1].map(side=>Math.max(signal.feetY[side],...[29+side,31+side].filter(i=>p[i]&&vis(p[i])>=.35&&p[i].y>.02&&p[i].y<.98).map(i=>p[i].y*height)));
+    return signal;
   }
 
   return { JumpCounter, extractSignal, REASONS,createClassroomCounter,measurementSignal };
