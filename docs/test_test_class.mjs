@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {createTestClassApi,testStorage,composeTestSong,TEST_CLASS_NO} from './test_class.js';
+import {studentLink} from './student_access.js';
+const values=new Map(),storage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,String(v)),removeItem:k=>values.delete(k),key:i=>[...values.keys()][i],get length(){return values.size;}};
+let now=Date.parse('2026-11-09T03:00:00Z');const test=createTestClassApi({storage,now:()=>now});
+const target={grade:1,classNo:TEST_CLASS_NO,number:3};const initial=await test.api({type:'teacherData',...target});
+assert.equal(initial.ranking.length,15);assert.equal(initial.records.length,142);assert.equal(initial.music.length,3);assert(initial.records.every(r=>r.classNo===TEST_CLASS_NO));assert.equal((await test.api({type:'bootstrap',...target})).records.length,10);
+const one=await test.api({type:'bootstrap',...target});assert.equal(one.ranking.total,15);assert(one.ranking.leaders.some(r=>r.number===3));
+await assert.rejects(()=>test.api({type:'record',grade:1,classNo:1,number:3}),/테스트 반/);await assert.rejects(()=>test.api({type:'bootstrap',...target,number:16}),/1~15/);await assert.rejects(()=>test.api({type:'unknown'}),/지원하지/);
+test.setLive(true);now+=5000;assert.equal((await test.api({type:'teacherLive',...target})).progress.length,8);now+=60000;assert.equal((await test.api({type:'teacherLive',...target})).progress.length,0);
+const before=initial.records.length;await test.api({type:'record',...target,id:'test-new',lessonId:initial.lessonId,count:130,durationSeconds:60,createdAt:new Date(now).toISOString()});await test.api({type:'record',...target,id:'test-new',lessonId:initial.lessonId,count:130,durationSeconds:60,createdAt:new Date(now).toISOString()});assert.equal((await test.api({type:'teacherData'})).records.length,before+1);
+assert.equal((await createTestClassApi({storage,now:()=>now}).api({type:'teacherData'})).records.length,before+1,'Test changes persist in the test namespace');
+values.set('jumpy_record_pending_real','real');const isolated=testStorage(storage);isolated.setItem('jumpy_record_pending_demo','demo');assert.equal(isolated.getItem('jumpy_record_pending_real'),null);assert.equal(values.get('jumpy_record_pending_real'),'real');assert.equal(isolated.getItem('jumpy_record_pending_demo'),'demo');
+const link=new URL(studentLink('https://example.org/app/teacher.html?test=1&pin=secret','',{grade:1,classNo:30}));assert.equal(link.search,'?test=1');assert.equal(link.hash,'');
+const songBytes=[];for(const [i,bpm]of [125,128,123].entries()){const bytes=composeTestSong(bpm,i),view=new DataView(bytes.buffer);assert.equal(new TextDecoder().decode(bytes.slice(0,4)),'RIFF');assert.equal(view.getUint32(24,true),16000);assert(Math.abs((bytes.length-44)/32000-128*60/bpm)<.01);let energy=0;for(let j=44;j<bytes.length;j+=2){const v=view.getInt16(j,true)/32768;energy+=v*v;}assert(Math.sqrt(energy/((bytes.length-44)/2))>.04);songBytes.push(Buffer.from(bytes).subarray(1000,5000).toString('base64'));}assert.equal(new Set(songBytes).size,3,'Three distinct original songs');
+console.log('Test class passed: seeded growth/ranking/music, class isolation, namespace-only storage, persistence, live demo completion, duplicate IDs, safe QR and playable original PCM songs.');

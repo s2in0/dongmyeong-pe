@@ -1,20 +1,22 @@
+import {TEST_MODE,TEST_CLASS_NO,TEST_ROSTER,createTestClassApi,testStorage,mountTestTools} from './test_class.js?v=46';
 import {createPendingRecords} from './pending_records.js?v=42';
 import {createProgressSender} from './record_progress.js?v=42';
 import {createCameraStart} from './camera_start.js?v=36';
 import {renderBoard,highlightBoard,createSongPlayer} from './choreo_view.js?v=40';
-import {initStudentSong} from './student_song.js?v=40';
+import {initStudentSong} from './student_song.js?v=46';
 import {BEATS_PER_MOVE,actionBeats,musicPosition} from './music_timeline.js?v=40';
 import {classRoster,validateStudentNumber} from './class_roster.js?v=36';
 import {createRecordDelivery,deliverOutbox} from './record_delivery.js?v=42';
 import {DEFAULT_BPM,validBpm,beatMilliseconds} from './music_rhythm.js?v=40';
 import {estimatedTime} from './music_sequence.js?v=28';
 import {MAX_BARS,emptyBar,countBeats,loadBars,packBars,locateBeat,isSplit,cellFilled,splitCell,normalizeCell} from './music_bars.js?v=40';
-import {studentClass} from './student_access.js?v=23';
+import {studentClass} from './student_access.js?v=46';
 // Load camera inference only when measurement starts; music editing works without it.
 import {createRankingMotion,showAnimatedCount} from './ranking_motion.js?v=19';
 import {initSymbolFit} from './symbol_fit.js?v=40';
 initSymbolFit();
-const $=id=>document.getElementById(id), KEY='jr_pwa_v1';
+const $=id=>document.getElementById(id), KEY=TEST_MODE?'jumpy_test_student_v1':'jr_pwa_v1';
+const testClass=TEST_MODE?createTestClassApi():null;
 const DEFAULT_SHEET_URL='https://script.google.com/macros/s/AKfycbzeU4BDW7u8fluc1OT5i-C1wYiMAHuzBT2myOpQbi89GcR6i8rHx5mLBVoWlT0IcRt6zQ/exec';
 const defaults={durationSeconds:30,countdownSeconds:3,sensitivity:'보통',retryAllowed:true,retryLimit:2,recordMode:'best',rankingVisible:true,activityOpen:true};
 const defaultMedals=[{id:'first-step',name:'첫 발걸음',type:'count',goal:10,image:'first-step'},{id:'silver-rhythm',name:'은빛 리듬',type:'count',goal:30,image:'silver-rhythm'},{id:'sky-jump',name:'하늘 점프',type:'count',goal:60,image:'sky-jump'},{id:'steady-star',name:'꾸준한 별',type:'attempts',goal:3,image:'steady-star'}];
@@ -28,11 +30,11 @@ function read(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch{ret
 let state=Object.assign({url:DEFAULT_SHEET_URL,identity:null,settings:defaults,musicSettings:{activityOpen:true},medals:defaultMedals,moveOptions:defaultMoves,records:[],outbox:[],deliveryMeta:{}},read());
 // Shared classroom devices always start at the student entry screen.
 state.identity=null;state.ranking=null;
-const pendingRecords=createPendingRecords({getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value),removeItem:key=>localStorage.removeItem(key),key:i=>localStorage.key(i),get length(){return localStorage.length;}});state.outbox=pendingRecords.restore(state.outbox);
+const pendingRecords=createPendingRecords(TEST_MODE?testStorage(localStorage):{getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value),removeItem:key=>localStorage.removeItem(key),key:i=>localStorage.key(i),get length(){return localStorage.length;}});state.outbox=pendingRecords.restore(state.outbox);
 function store(){state.outbox=pendingRecords.restore(state.outbox);state.records=[...new Map([...state.records,...state.outbox].map(record=>[record.id,record])).values()];try{localStorage.setItem(KEY,JSON.stringify(state));}catch{/* Per-record pending keys and memory keep the finish available for sending. */}}
 const qs=new URLSearchParams(location.search);if(qs.get('sheet')&&/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(qs.get('sheet'))){state.url=qs.get('sheet');store()}
 const qrClass=studentClass(location.search);if(qrClass){$('grade').value=qrClass.grade;$('classNo').value=qrClass.classNo;$('number').value='';}
-function updateEntryRoster(){const roster=classRoster(Number($('grade').value),Number($('classNo').value));$('number').max=roster?roster.maxNumber:99;$('number').placeholder=roster?`1~${roster.maxNumber}번`:'번호';}
+function updateEntryRoster(){const roster=TEST_MODE?TEST_ROSTER:classRoster(Number($('grade').value),Number($('classNo').value));$('number').max=roster?roster.maxNumber:99;$('number').placeholder=roster?`1~${roster.maxNumber}번`:'번호';}
 for(const field of ['grade','classNo'])$(field).addEventListener('input',updateEntryRoster);updateEntryRoster();
 function show(id){for(const x of ['login','dashboard','measure','result'])$(x).classList.toggle('hidden',x!==id);$('bottomNav').classList.toggle('hidden',id!=='dashboard');$('teacherLink').classList.toggle('hidden',id!=='login');if(id==='dashboard')selectPanel('homePanel');window.scrollTo(0,0)}
 function selectPanel(id){if(id!=='musicPanel')stopPractice();for(const panel of document.querySelectorAll('.student-panel'))panel.classList.toggle('hidden',panel.id!==id);document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.target===id));if(id==='historyPanel'&&state.identity)requestAnimationFrame(()=>drawGrowth(myRecords().filter(r=>r.durationSeconds===state.settings.durationSeconds)));window.scrollTo({top:0,behavior:'smooth'})}
@@ -42,7 +44,7 @@ function sameId(a,b){return a&&b&&a.grade===b.grade&&a.classNo===b.classNo&&a.nu
 function myRecords(){return state.records.filter(r=>sameId(r,state.identity)).sort((a,b)=>a.createdAt.localeCompare(b.createdAt))}
 function todayString(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function localDay(iso){const d=new Date(iso);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
-async function api(body){if(!state.url)throw Error('시트 연결 주소가 없습니다. 현재 기기에만 기록됩니다.');const ctrl=new AbortController(),to=setTimeout(()=>ctrl.abort(),body.type==='recordProgress'?4000:body.type==='record'?10000:body.type==='musicSubmit'&&body.audio||body.type==='musicLibraryAudio'?90000:18000);try{const r=await fetch(state.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),signal:ctrl.signal,redirect:'follow',keepalive:body.type==='record'||body.type==='flushRecords'});const j=await r.json();if(!j.ok)throw Error(j.error||'요청 실패');return j}finally{clearTimeout(to)}}
+async function api(body){if(TEST_MODE)return testClass.api(body);if(!state.url)throw Error('시트 연결 주소가 없습니다. 현재 기기에만 기록됩니다.');const ctrl=new AbortController(),to=setTimeout(()=>ctrl.abort(),body.type==='recordProgress'?4000:body.type==='record'?10000:body.type==='musicSubmit'&&body.audio||body.type==='musicLibraryAudio'?90000:18000);try{const r=await fetch(state.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),signal:ctrl.signal,redirect:'follow',keepalive:body.type==='record'||body.type==='flushRecords'});const j=await r.json();if(!j.ok)throw Error(j.error||'요청 실패');return j}finally{clearTimeout(to)}}
 let flushPending=false,flushNeeded=false,flushRetry=null,lastResultRecordId=null;
 state.deliveryMeta??={};
 function scheduleCloudFlush(delay=1800){flushNeeded=true;if(!flushRetry)flushRetry=setTimeout(()=>{flushRetry=null;flushCloudRecords();},delay+Math.floor(Math.random()*700));}
@@ -54,7 +56,7 @@ function updateDeliveryStatus(){
  $('retryRecordSync').classList.toggle('hidden',!pending.length);$('retryRecordSync').disabled=sending;
  if(pending.length&&!pendingRecords.healthy){$('syncStatus').textContent='기기 저장 공간 확인 필요 · 전송이 끝날 때까지 이 화면을 열어 두세요.';}else if(pending.length)$('syncStatus').textContent=!navigator.onLine?`기기에 ${pending.length}건 보관 중 · Wi-Fi가 연결되면 자동 전송해요.`:review.length?`선생님 확인 필요 ${review.length}건 · 다른 기록은 계속 전송해요. ${state.deliveryMeta[review[0].id]?.error||''}`:`${sending?'선생님에게 전송 중':'전송 대기'} ${pending.length}건 · 연결되면 자동으로 다시 보내요.`;
  else $('syncStatus').textContent=state.url?'':'이 기기에만 저장된 기록이에요.';
- if(lastResultRecordId){const rec=state.outbox.find(row=>row.id===lastResultRecordId),meta=state.deliveryMeta[lastResultRecordId];$('sendResultNow').classList.toggle('hidden',!rec);$('sendResultNow').disabled=meta?.status==='sending';$('saveStatus').textContent=rec&&!pendingRecords.healthy?'기기 저장 공간 확인 필요 · 서버 도착 확인 전까지 이 화면을 열어 두세요.':!rec?'✓ 선생님 서버 도착 확인 · 순위가 갱신돼요.':meta?.status==='review'?`기록은 기기에 보관했어요. 선생님 확인이 필요해요: ${meta.error}`:!navigator.onLine?'Wi-Fi 연결을 기다려요 · 기록은 이 기기에 보관했어요.':meta?.status==='sending'?`선생님에게 전송 중${meta.attempt>1?' · 재시도 '+meta.attempt+'회':''}…`:'전송 대기 · 자동 재전송합니다. 아래 버튼으로 다시 보낼 수도 있어요.';}
+ if(lastResultRecordId){const rec=state.outbox.find(row=>row.id===lastResultRecordId),meta=state.deliveryMeta[lastResultRecordId];$('sendResultNow').classList.toggle('hidden',!rec);$('sendResultNow').disabled=meta?.status==='sending';$('saveStatus').textContent=rec&&!pendingRecords.healthy?'기기 저장 공간 확인 필요 · 서버 도착 확인 전까지 이 화면을 열어 두세요.':!rec?(TEST_MODE?'✓ 테스트 기록 저장 완료':'✓ 선생님 서버 도착 확인 · 순위가 갱신돼요.'):meta?.status==='review'?`기록은 기기에 보관했어요. 선생님 확인이 필요해요: ${meta.error}`:!navigator.onLine?'Wi-Fi 연결을 기다려요 · 기록은 이 기기에 보관했어요.':meta?.status==='sending'?`선생님에게 전송 중${meta.attempt>1?' · 재시도 '+meta.attempt+'회':''}…`:'전송 대기 · 자동 재전송합니다. 아래 버튼으로 다시 보낼 수도 있어요.';}
 }
 function reconcileReceivedRecords(rows){if(!state.identity)return;const received=new Map((rows||[]).map(row=>[row.id,row]));for(const rec of [...state.outbox]){if(!sameId(rec,state.identity))continue;const saved=received.get(rec.id);if(saved&&saved.count===rec.count&&saved.durationSeconds===rec.durationSeconds&&saved.lessonId===rec.lessonId)recordArrived(rec,{createdAt:saved.createdAt,queued:false});}}
 let outboxFlight=null;
@@ -67,7 +69,7 @@ const studentRankingMotion=createRankingMotion($('leaders'),{
  patch(li,row,old,{animate}){li.rankParts.place.textContent=`${row.rank}위`;li.classList.toggle('mine',row.number===state.identity?.number);showAnimatedCount(li.rankParts.score,row.count,{animate});const change=old?old.rank-row.rank:0;li.rankParts.movement.textContent=animate&&change?`${change>0?'▲':'▼'} ${Math.abs(change)}`:'';li.rankParts.movement.classList.toggle('rank-up',change>0);li.setAttribute('aria-label',`${row.rank}위 ${row.number}번 ${row.count}회`)}
 });
 function render(){if(!state.identity)return;const s=state.settings,all=myRecords(),same=all.filter(r=>r.durationSeconds===s.durationSeconds),last=same.at(-1),prior=same.at(-2),best=same.length?Math.max(...same.map(r=>r.count)):null;
-$('studentTitle').textContent=`${state.identity.grade}학년 ${state.identity.classNo}반 ${state.identity.number}번`;
+$('studentTitle').textContent=TEST_MODE?`테스트 · ${state.identity.number}번`:`${state.identity.grade}학년 ${state.identity.classNo}반 ${state.identity.number}번`;
 $('today').textContent=all.filter(r=>localDay(r.createdAt)===todayString()).length?Math.max(...all.filter(r=>localDay(r.createdAt)===todayString()).map(r=>r.count))+'회':'—';
 $('best').textContent=best===null?'—':best+'회';$('change').textContent=prior&&last?`${last.count-prior.count>0?'+':''}${last.count-prior.count}회`:'—';
 $('rank').textContent=s.rankingVisible&&state.ranking?(state.ranking.rank?`같은 ${s.durationSeconds}초 기록 · 반별 ${state.ranking.rank}위 / ${state.ranking.total}명`:'아직 순위에 반영할 기록이 없어요.'):'반별 순위 비공개';
@@ -118,7 +120,7 @@ function updateResultRanking(){if($('result').classList.contains('hidden'))retur
 function refreshStudentLive(){if(!state.identity||!state.url||!navigator.onLine)return Promise.resolve(false);if(studentLivePending)return studentLivePending;const identity={...state.identity},readSeq=++studentConfigReadSeq;studentLivePending=(async()=>{try{const data=await api({type:'studentLive',...identity});if(!sameId(identity,state.identity))return false;applyStudentSettings(data,readSeq);if(data.lessonId!==state.lessonId)return false;state.ranking=data.ranking;reconcileReceivedRecords(data.records);const known=new Map(state.records.map(r=>[r.id,r]));for(const record of data.records||[])known.set(record.id,record);state.records=[...known.values()];store();render();updateResultRanking();return true;}catch{return false;}finally{studentLivePending=null;}})();return studentLivePending;}
 function wakeStudentSettings(){if(!document.hidden&&state.identity){if(state.outbox.length)sync();else refreshStudentSettings();}}
 document.addEventListener('visibilitychange',wakeStudentSettings);window.addEventListener('pageshow',wakeStudentSettings);window.addEventListener('focus',wakeStudentSettings);
-$('enter').onclick=async()=>{try{const id=validateStudentNumber({grade:validNum('grade',1,6),classNo:validNum('classNo',1,30),number:validNum('number',1,99)});state.identity=id;state.ranking=null;settingsConfirmed=false;state.lessonId='';store();$('loginError').textContent='';show('dashboard');loadMusicDraft();render();refreshStudentSettings();refresh();await sync()}catch(e){$('loginError').textContent=e.message}};
+$('enter').onclick=async()=>{try{const id=TEST_MODE?{grade:1,classNo:TEST_CLASS_NO,number:validNum('number',1,15)}:validateStudentNumber({grade:validNum('grade',1,6),classNo:validNum('classNo',1,30),number:validNum('number',1,99)});state.identity=id;state.ranking=null;settingsConfirmed=false;state.lessonId='';store();$('loginError').textContent='';show('dashboard');loadMusicDraft();render();refreshStudentSettings();refresh();await sync()}catch(e){$('loginError').textContent=e.message}};
 $('switchStudent').onclick=()=>{cancelCamera();state.identity=null;state.ranking=null;store();$('number').value='';show('login')};
 const liveProgress=createProgressSender({send:api});
 let landmarker=null,stream=null,counter=null,phase='idle',readyFrames=0,lastFrame=-1,raf=0,clock=0,measurementStart=0,deadline=0,activeSettings=null,raisedSince=0;
@@ -186,7 +188,7 @@ function normalizeMove(move){
   return symbol&&symbol.length<=8&&label&&label.length<=20?{symbol,label}:null
 }
 const normalizeBarCell=cell=>normalizeCell(cell,normalizeMove);
-function draftKey(){return state.identity?`jumpy_music_${state.identity.grade}_${state.identity.classNo}_${state.identity.number}`:null}
+function draftKey(){if(TEST_MODE)return state.identity?`jumpy_test_music_${state.identity.number}`:null;return state.identity?`jumpy_music_${state.identity.grade}_${state.identity.classNo}_${state.identity.number}`:null}
 function stopPractice(){
   practiceGeneration++;
   songPlayer.stop();
@@ -203,6 +205,7 @@ function saveMusicDraft(){
 function loadMusicDraft(){
   stopPractice();pendingMusicSubmission=null;
   let d={};try{d=JSON.parse(localStorage.getItem(draftKey())||'{}')}catch{}
+  if(TEST_MODE&&!d.bars)d=testClass.seedDraft(state.identity.number)||{};
   $('groupName').value=d.groupName||'';$('musicTheme').value=d.theme||'';
   try{$('musicBpm').value=validBpm(d.bpm??DEFAULT_BPM)}catch{$('musicBpm').value=DEFAULT_BPM}
   $('songRate').value=String(RATES.includes(Number(d.rate))?Number(d.rate):1);
@@ -378,3 +381,15 @@ $('submitMusic').onclick=async()=>{
 setInterval(()=>{if(navigator.onLine&&!document.hidden&&phase!=='measuring'&&phase!=='countdown'&&state.outbox.length)sync();},5000);
 window.addEventListener('offline',updateDeliveryStatus);document.addEventListener('visibilitychange',()=>{if(!document.hidden){updateDeliveryStatus();sync();}});
 window.addEventListener('online',()=>{wakeStudentSettings();sync()});window.addEventListener('resize',()=>{if(state.identity)render()});if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(console.warn);
+
+if(TEST_MODE){
+ state.url='test';$('grade').value=1;$('grade').disabled=true;$('classNo').type='text';$('classNo').value='테스트';$('classNo').disabled=true;
+ document.querySelector('.header-label').textContent='테스트';document.querySelector('#teacherLink a').href='teacher.html?test=1';
+ mountTestTools();
+ const selector=document.createElement('select');selector.id='testStudentSelect';selector.setAttribute('aria-label','테스트 학생 번호');
+ for(const n of TEST_ROSTER.numbers){const option=document.createElement('option');option.value=n;option.textContent=n+'번';selector.append(option);}
+ const requested=Number(qs.get('number'))||3;selector.value=TEST_ROSTER.numbers.includes(requested)?requested:3;
+ selector.onchange=()=>{const link=new URL(location.href);link.searchParams.set('number',selector.value);location.href=link.href;};document.querySelector('.test-tools').append(selector);
+ $('number').value=selector.value;
+ (async()=>{await $('enter').onclick();await refresh();const view=qs.get('view')||'history';if(view==='music')$('musicBtn').click();else selectPanel(({history:'historyPanel',ranking:'rankPanel',home:'homePanel'})[view]||'historyPanel');})();
+}

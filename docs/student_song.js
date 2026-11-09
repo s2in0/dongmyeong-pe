@@ -38,7 +38,7 @@ export function initStudentSong({api,identity,select,info,status,audio,onSelecte
       if(token!==generation)return;
       url=URL.createObjectURL(saved.blob);audio.src=url;audio.load();
       const seconds=await duration(audio);if(token!==generation)return;
-      current={...song,durationSeconds:seconds};
+      current={...song,durationSeconds:seconds};select.value=current.id;
       if(!current.bpm){status.textContent='추천 BPM을 계산하는 중…';try{current.bpm=(await detectBpmFromFile(saved.blob)).bpm;current.bpmComputedHere=true;}catch{status.textContent='BPM을 계산하지 못했어요. 직접 입력해 주세요.';}}
       if(token!==generation)return;
       renderInfo();if(!quiet||status.textContent.startsWith('노래를')||status.textContent.startsWith('추천'))status.textContent='';

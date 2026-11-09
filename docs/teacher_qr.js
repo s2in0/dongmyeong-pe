@@ -1,5 +1,5 @@
 import qrcode from './vendor/qrcode.mjs';
-import {studentLink} from './student_access.js?v=23';
+import {studentLink} from './student_access.js?v=46';
 
 export function drawStudentQr(canvas,link) {
   const qr=qrcode(0,'M');qr.addData(link);qr.make();
@@ -22,7 +22,7 @@ export function initStudentQr(getIdentity,getEndpoint) {
     try{
       const identity=getIdentity(),current=++sequence;file=null;
       link=studentLink(location.href,getEndpoint(),identity);drawStudentQr(canvas,link);
-      $('studentQrTitle').textContent=`${identity.grade}학년 ${identity.classNo}반 · 학생 접속`;
+      $('studentQrTitle').textContent=new URL(link).searchParams.get('test')==='1'?'테스트 · 학생 접속':`${identity.grade}학년 ${identity.classNo}반 · 학생 접속`;
       $('studentQrLink').href=link;$('studentQrLink').textContent=link;
       $('downloadStudentQr').disabled=$('shareStudentQr').disabled=true;status('');dialog.showModal();
       canvas.toBlob(blob=>{

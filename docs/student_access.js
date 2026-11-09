@@ -1,6 +1,7 @@
 // Student links carry the class and public sheet endpoint, never teacher credentials.
 export function studentLink(pageUrl, endpoint, identity) {
   const link=new URL('./',pageUrl);
+  if(new URL(pageUrl).searchParams.get('test')==='1'){link.searchParams.set('test','1');return link.href;}
   if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(endpoint))throw Error('시트 연결 주소를 확인해 주세요.');
   const {grade,classNo}=identity;
   if(!Number.isInteger(grade)||grade<1||grade>6||!Number.isInteger(classNo)||classNo<1||classNo>30)throw Error('반을 선택해 주세요.');

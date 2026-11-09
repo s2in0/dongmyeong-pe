@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>JUMPY 교사 화면</title>
-  <link rel="stylesheet" href="style.css?v=42">
+  <link rel="stylesheet" href="style.css?v=46">
 </head>
 <body class="teacher-app">
 <main class="teacher-shell">
@@ -14,7 +14,7 @@
     <span class="eyebrow">TEACHER SPACE</span><h1>선생님 로그인</h1><p class="subtle">교사 PIN으로 수업 화면에 들어갑니다.</p>
     <label for="teacherPin">교사 PIN</label><input id="teacherPin" type="password" autocomplete="off" placeholder="PIN 입력">
     <label for="teacherUrl">시트 연결 주소</label><input id="teacherUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec">
-    <button id="teacherEnter" class="primary wide">로그인</button><p id="loginStatus" class="error" role="alert"></p>
+    <button id="teacherEnter" class="primary wide">로그인</button><a href="teacher.html?test=1" class="secondary test-entry-link">테스트</a><p id="loginStatus" class="error" role="alert"></p>
   </section>
   <section id="teacherContent" class="hidden">
     <div class="teacher-board">
@@ -27,7 +27,7 @@
           <button type="button" data-class="2" aria-pressed="false">2반</button>
           <button type="button" data-class="3" aria-pressed="false">3반</button>
         </div>
-        <button id="showStudentQr" class="primary" type="button">학생 접속 QR코드</button>
+        <a id="testClassLink" href="teacher.html?test=1" class="secondary test-class-link">테스트</a><button id="showStudentQr" class="primary" type="button">학생 접속 QR코드</button>
         <button id="copyStudentLink" class="secondary">학생용 링크 복사</button>
         <button id="teacherLogout" class="secondary">로그아웃</button>
         <p id="teacherStatus" class="status-line" role="status"></p><p id="classSheetStatus" class="status-line" role="status"></p>
@@ -101,6 +101,6 @@
   <p id="studentQrStatus" class="status-line" role="status"></p>
   <details class="qr-link-details"><summary>접속 링크 보기</summary><a id="studentQrLink" target="_blank" rel="noopener"></a></details>
 </dialog>
-<script type="module" src="teacher.js?v=44"></script>
+<script type="module" src="teacher.js?v=46"></script>
 </body>
 </html>

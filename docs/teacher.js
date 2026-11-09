@@ -1,9 +1,10 @@
+import {TEST_MODE,TEST_CLASS_NO,TEST_ROSTER,createTestClassApi,mountTestTools} from './test_class.js?v=46';
 import {improvementRanking,liveChartRows,rankingPhase} from './growth_ranking.js?v=44';
-import {classRoster,ropeParticipation} from './class_roster.js?v=35';
+import {classRoster as schoolRoster,ropeParticipation} from './class_roster.js?v=35';
 import {unpackBars,countBeats} from './music_bars.js?v=40';
 import {totalBeats,estimatedTime} from './music_sequence.js?v=28';
-import {initStudentQr} from './teacher_qr.js?v=23';
-import {studentLink} from './student_access.js?v=23';
+import {initStudentQr} from './teacher_qr.js?v=46';
+import {studentLink} from './student_access.js?v=46';
 import {recordDay,recordTime,filterRecords,summarizeRecords,recordsCsv} from './teacher_records.js?v=22';
 import {createRankingMotion,showAnimatedCount,podiumGroups,reducedMotion} from './ranking_motion.js?v=19';
 import {initSymbolFit} from './symbol_fit.js?v=40';
@@ -11,6 +12,7 @@ import {initTeacherSongs} from './teacher_songs.js?v=40';
 import {openPresentation,closePresentation} from './teacher_present.js?v=40';
 initSymbolFit();
 const $=id=>document.getElementById(id);
+const testClass=TEST_MODE?createTestClassApi():null,classRoster=(g,c)=>TEST_MODE?TEST_ROSTER:schoolRoster(g,c);
 const DEFAULT_URL='https://script.google.com/macros/s/AKfycbzeU4BDW7u8fluc1OT5i-C1wYiMAHuzBT2myOpQbi89GcR6i8rHx5mLBVoWlT0IcRt6zQ/exec';
 $('teacherUrl').value=localStorage.getItem('jumpy_teacher_url')||DEFAULT_URL;
 let musicSettingsDirty=false,pendingMusicRequest=null,latestMusicSettings=null,latestMusicClass='';
@@ -19,7 +21,7 @@ let recordView='history',recordsAvailable=false,recordDetails=new Set(),loadSequ
 let liveReadPending=null,liveReadSeq=0,liveAppliedSeq=0,recordFlushPending=false,lastRecordFlushAt=0,lastPendingRecords=0;
 let latestProgress=[],chartRanking=[],latestGrowth=[];
 let latestRanking=[],rankingSettings=null,rankingScope='',rankFinalMode=false,finalSnapshot=null,finalTimers=[],pollTicks=0;
-const rememberedClass=Number(localStorage.getItem('jumpy_teacher_class'));
+const rememberedClass=Number(new URLSearchParams(location.search).get('class')||localStorage.getItem('jumpy_teacher_class')); 
 if([1,2,3].includes(rememberedClass))$('tClass').value=rememberedClass;
 const defaultMedals=[{id:'first-step',name:'첫 발걸음',type:'count',goal:10,image:'first-step'},{id:'silver-rhythm',name:'은빛 리듬',type:'count',goal:30,image:'silver-rhythm'},{id:'sky-jump',name:'하늘 점프',type:'count',goal:60,image:'sky-jump'},{id:'steady-star',name:'꾸준한 별',type:'attempts',goal:3,image:'steady-star'}];
 const medalImages=['first-step','silver-rhythm','sky-jump','steady-star','fire-jump','moon-jump','rainbow-jump','crown-jump'];
@@ -28,7 +30,7 @@ const moveSymbols={'모아뛰기':'○','번갈아뛰기':'↔','엇걸기':'✕
 const defaultMoves=[{symbol:'o',label:'발모아뛰기 1박'},{symbol:'O',label:'발모아뛰기 2박'},{symbol:'so',label:'사이드발모아'},{symbol:'sc',label:'사이드크로스'},{symbol:'ox',label:'발모아크로스'},{symbol:'십자뛰기',label:'십자뛰기'},{symbol:'가위바위보뛰기',label:'가위바위보뛰기'},{symbol:'앞흔들어뛰기',label:'앞흔들어뛰기'},{symbol:'뒤들어모아뛰기',label:'뒤들어모아뛰기'},{symbol:'번갈아뛰기 1박',label:'번갈아뛰기 1박'},{symbol:'번갈아뛰기 2박',label:'번갈아뛰기 2박'},{symbol:'옆흔들어뛰기',label:'옆흔들어뛰기'},{symbol:'지그재그뛰기',label:'지그재그뛰기'}];
 let moveOptionsDraft=defaultMoves.map(m=>({...m}));
 function number(id,min,max){const n=Number($(id).value);if(!Number.isInteger(n)||n<min||n>max)throw Error(`${id} 값을 확인해 주세요.`);return n}
-async function api(body,externalSignal){const controller=new AbortController(),abort=()=>controller.abort(),timeout=setTimeout(abort,body.type==='teacherLive'?8000:body.type==='refreshClassSheets'?60000:body.type==='saveSettings'?12000:body.type==='musicAudio'||body.type==='musicLibraryUpload'||body.type==='musicLibraryAudioAdmin'?90000:18000);if(externalSignal?.aborted)abort();else externalSignal?.addEventListener('abort',abort,{once:true});try{const response=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),signal:controller.signal,redirect:'follow'});const data=await response.json();if(!data.ok)throw Error(data.error||'요청 실패');return data}finally{clearTimeout(timeout);externalSignal?.removeEventListener('abort',abort)}}
+async function api(body,externalSignal){if(TEST_MODE)return testClass.api(body);const controller=new AbortController(),abort=()=>controller.abort(),timeout=setTimeout(abort,body.type==='teacherLive'?8000:body.type==='refreshClassSheets'?60000:body.type==='saveSettings'?12000:body.type==='musicAudio'||body.type==='musicLibraryUpload'||body.type==='musicLibraryAudioAdmin'?90000:18000);if(externalSignal?.aborted)abort();else externalSignal?.addEventListener('abort',abort,{once:true});try{const response=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),signal:controller.signal,redirect:'follow'});const data=await response.json();if(!data.ok)throw Error(data.error||'요청 실패');return data}finally{clearTimeout(timeout);externalSignal?.removeEventListener('abort',abort)}}
 const chosen=()=>({grade:number('tGrade',1,6),classNo:number('tClass',1,30)});
 function fillSettings(s){$('duration').value=s.durationSeconds;$('countdownSetting').value=s.countdownSeconds;$('sensitivity').value=s.sensitivity;$('retryLimit').value=s.retryLimit;$('retryAllowed').checked=s.retryAllowed;$('recordMode').value=s.recordMode;$('rankingVisible').checked=s.rankingVisible;$('activityOpen').checked=s.activityOpen;settingsDirty=false}
 function readSettings(){return {durationSeconds:number('duration',5,600),countdownSeconds:number('countdownSetting',0,15),sensitivity:$('sensitivity').value,retryLimit:number('retryLimit',0,20),retryAllowed:$('retryAllowed').checked,recordMode:$('recordMode').value,rankingVisible:$('rankingVisible').checked,activityOpen:$('activityOpen').checked}}
@@ -103,7 +105,7 @@ function renderRecords(){
   const body=$('classRecords'),records=filteredRecords(),head=element('tr');body.replaceChildren();
   const labels=recordView==='students'?['번호','제한시간','최고기록','최근기록','이전 대비','도전','최근 측정일','이력']:['측정일','번호','횟수','제한시간','줄넘기 설정'];
   for(const label of labels){const th=element('th','',label);th.scope='col';head.append(th)}$('recordTableHead').replaceChildren(head);
-  $('recordCaption').textContent=`${loadedClass?.grade||1}학년 ${loadedClass?.classNo||$('tClass').value}반 · ${recordView==='students'?'학생별 요약':'전체 도전 이력'}`;
+  $('recordCaption').textContent=TEST_MODE?'테스트 · 가상 기록':`${loadedClass?.grade||1}학년 ${loadedClass?.classNo||$('tClass').value}반 · ${recordView==='students'?'학생별 요약':'전체 도전 이력'}`;
   $('recordBackendStatus').classList.toggle('hidden',recordsAvailable);
   $('recordBackendStatus').textContent=recordsAvailable?'':'반별 기록을 보려면 새 Apps Script 코드를 배포해 주세요.';
   $('downloadRecords').disabled=!recordsAvailable||!records.length;
@@ -155,18 +157,18 @@ async function loadClass(resetSettings=false,quiet=false,force=false){
     const data=await api({type:'teacherData',pin,...id},readController.signal);if(sequence!==loadSequence||!pin)return null;
     const classChanged=!loadedClass||loadedClass.grade!==id.grade||loadedClass.classNo!==id.classNo;
     if(classChanged)leaveFinalRanking();
-    $('classTitle').textContent=`${id.grade}학년 ${id.classNo}반`;if(readSeq>=liveAppliedSeq){liveAppliedSeq=readSeq;$('participantCount').textContent=`${data.participants.length}${classRoster(id.grade,id.classNo)?' / '+classRoster(id.grade,id.classNo).total:''}명`;$('classBest').textContent=data.ranking.length?`${data.ranking[0].count}회`:'—';
+    $('classTitle').textContent=TEST_MODE?'테스트':`${id.grade}학년 ${id.classNo}반`;if(readSeq>=liveAppliedSeq){liveAppliedSeq=readSeq;$('participantCount').textContent=`${data.participants.length}${classRoster(id.grade,id.classNo)?' / '+classRoster(id.grade,id.classNo).total:''}명`;$('classBest').textContent=data.ranking.length?`${data.ranking[0].count}회`:'—';
     renderRanking(data.ranking,data.settings,data.sessionId||data.lessonId,data.progress||[]);}
     const effectiveSettings=readSeq>=liveAppliedSeq?data.settings:rankingScope.startsWith(`${id.grade}-${id.classNo}-`)?rankingSettings||data.settings:data.settings;renderMusic(data.music);$('musicCount').textContent=`${data.music.length}조`;if(data.musicSettings&&(classChanged||readSeq>=liveAppliedSeq&&!musicSettingsDirty))fillMusicSettings(readSeq<liveAppliedSeq&&latestMusicClass===`${id.grade}-${id.classNo}`?latestMusicSettings:data.musicSettings);setRecords(classChanged?data.records:mergeRecordRows(data.records,classRecords),id,effectiveSettings,classChanged);
     if(classChanged||resetSettings||readSeq>=liveAppliedSeq&&!settingsDirty)fillSettings(effectiveSettings);
     if(classChanged||resetSettings||!movesDirty){moveOptionsDraft=(Array.isArray(data.moveOptions)?data.moveOptions:defaultMoves).map(move=>({...move}));movesDirty=false;renderMoveEditor()}
     if(!medalsDirty){medalsDraft=(Array.isArray(data.medals)&&data.medals.length?data.medals:defaultMedals).map(medal=>({...medal}));renderMedalEditor()}
     if(classChanged){$('saveStatus').textContent='';$('moveEditorStatus').textContent=''}
-    localStorage.setItem('jumpy_teacher_class',id.classNo);$('teacherStatus').textContent=data.sheetViewWarning||`${new Date().toLocaleTimeString('ko-KR')} 업데이트`;return data;
+    if(!TEST_MODE)localStorage.setItem('jumpy_teacher_class',id.classNo);$('teacherStatus').textContent=data.sheetViewWarning||`${new Date().toLocaleTimeString('ko-KR')} 업데이트`;return data;
   }catch(error){if(sequence!==loadSequence)return null;if(loadedClass){$('tGrade').value=loadedClass.grade;$('tClass').value=loadedClass.classNo;updateClassPicker()}$('teacherStatus').textContent=`조회 실패: ${error.message}`;throw error}
   finally{if(activeClassRead===readController)activeClassRead=null;if(sequence===loadSequence)setClassLoading(false)}
 }
-for(const button of document.querySelectorAll('[data-class]'))button.onclick=()=>{if(classWritePending)return;exitPresentation();leaveFinalRanking();$('tClass').value=button.dataset.class;closePresentation();if(!$('musicCard').classList.contains('hidden'))setTimeout(()=>teacherSongs.load(),0);loadClass(true).catch(()=>{})};
+for(const button of document.querySelectorAll('[data-class]'))button.onclick=()=>{if(TEST_MODE){location.href='teacher.html?class='+button.dataset.class;return;}if(classWritePending)return;exitPresentation();leaveFinalRanking();$('tClass').value=button.dataset.class;closePresentation();if(!$('musicCard').classList.contains('hidden'))setTimeout(()=>teacherSongs.load(),0);loadClass(true).catch(()=>{})};
 updateClassPicker();
 function showTab(id){exitPresentation();if(id!=='rankingCard')leaveFinalRanking();for(const pane of document.querySelectorAll('.teacher-pane'))pane.classList.toggle('hidden',pane.id!==id);for(const button of document.querySelectorAll('[data-teacher-tab]')){const active=button.dataset.teacherTab===id;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active))}if(id==='rankingCard'||id==='recordsCard')refreshTeacherLive().catch(()=>{});if(id==='musicCard'){loadClass(false,true).catch(()=>{});teacherSongs.load()}}
 function mergeRecordRows(...groups){const by=new Map();for(const rows of groups)for(const record of rows||[]){const key=record.id||`${record.createdAt}-${record.number}-${record.durationSeconds}-${record.count}`;by.set(key,record);}return [...by.values()];}
@@ -217,3 +219,12 @@ async function saveTeacherMusicSettings(startLesson=false){
  try{let data;try{data=await api({type:'saveMusicSettings',pin,...id,settings,startLesson,requestId});}catch(error){data=await api({type:'teacherSettings',pin,...id});if(data.musicSettingsRequestId!==requestId)throw error;}if(data.musicSettings.activityOpen!==settings.activityOpen)throw Error('음악 설정 확인값이 다릅니다.');fillMusicSettings(data.musicSettings);pendingMusicRequest=null;$('musicSettingsStatus').textContent=`${startLesson?'새 음악 수업 저장 확인':'음악 설정 저장 확인'} · 활동 ${settings.activityOpen?'열림':'닫힘'}`;}catch(error){musicSettingsDirty=true;$('musicSettingsStatus').textContent=`음악 설정 저장 실패: ${error.message}`;}finally{classWritePending=false;updateClassPicker();$('saveMusicSettings').disabled=false;$('startMusicLesson').disabled=false;$('musicActivityOpen').disabled=false;}refreshClassViews(true);refreshTeacherLive().catch(()=>{});
 }
 $('saveMusicSettings').onclick=()=>saveTeacherMusicSettings(false);$('startMusicLesson').onclick=()=>saveTeacherMusicSettings(true);
+
+if(TEST_MODE){
+ $('tClass').value=TEST_CLASS_NO;pin='test-only';url='test';
+ document.querySelector('.class-grade').textContent='테스트';$('testClassLink').classList.add('active');$('testClassLink').setAttribute('aria-current','page');
+ document.querySelector('.app-header a').href='./?test=1';$('songFolderLink').classList.add('hidden');
+ mountTestTools({teacher:true,live:testClass.live,onLive:active=>{testClass.setLive(active);leaveFinalRanking();showTab('rankingCard');refreshTeacherLive().catch(()=>{});}});
+ $('teacherLogout').onclick=()=>location.href='teacher.html';
+ (async()=>{const data=await loadClass(true);if(!data)return;$('teacherLogin').classList.add('hidden');$('teacherContent').classList.remove('hidden');const pane=({ranking:'rankingCard',records:'recordsCard',music:'musicCard',settings:'settingsCard'})[new URLSearchParams(location.search).get('view')]||'rankingCard';showTab(pane);timer=setInterval(pollClass,2000);})().catch(error=>{$('loginStatus').textContent=error.message;});
+}

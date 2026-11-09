@@ -69,3 +69,8 @@ body.presenting-music{overflow:hidden}
 .present-countdown{position:absolute;inset:0;display:grid;place-items:center;background:#14223c99;color:#fff;font-size:min(30vw,220px);font-weight:900;pointer-events:none}
 
 .rank-measuring .rank-fill{background:linear-gradient(90deg,#96c7ff,#347eff)}.rank-waiting{opacity:.55}.rank-fill{transition:width 1.4s cubic-bezier(.22,1,.36,1)}.growth-detail{font-size:14px;line-height:1.5;color:var(--muted)}#growthAll{margin-top:28px;scroll-margin-top:20px}.growth-positive td:last-child{color:var(--brand-dark);font-weight:900}.final-podium .podium-score{white-space:nowrap}@media(prefers-reduced-motion:reduce){.rank-fill{transition:none}}
+
+/* Test class uses the existing classroom palette and type styles. */
+.test-tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin:0 0 20px;padding:12px 16px;border:1px solid var(--line);border-radius:16px;background:#f6f9ff}.test-tools>strong{color:var(--brand-dark)}.test-tools .text-button{font-size:13px}.test-tools button{font-size:13px;min-height:38px;padding:6px 12px}.test-tools select{width:90px;min-height:38px;font-size:13px}.test-entry-link{display:block;text-align:center;margin-top:12px}.test-class-link{display:block;text-align:center;text-decoration:none}.test-class-link.active{background:var(--brand);color:white}.teacher-sidebar>.test-class-link{margin-top:8px}.teacher-sidebar>.test-class-link.active{font-weight:800}
+
+.test-tools .test-note{font-size:12px;margin:0}
